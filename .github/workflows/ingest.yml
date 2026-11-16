@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: "Opcional: dataset para carregar o histórico (btc-usd-1m ou fear-greed). Se preenchido, roda só isso."
+        description: "Opcional: dataset para carregar o histórico (btc-usd-1m, fear-greed ou gkg-hourly). Se preenchido, roda só isso. O gkg-hourly vem de history/gkg-hourly.parquet e ignora as datas."
         type: string
         default: ""
       desde:
@@ -69,7 +69,9 @@ jobs:
           DESDE: ${{ inputs.desde }}
           ATE: ${{ inputs.ate }}
         run: |
-          if [ -n "$BACKFILL" ]; then
+          if [ "$BACKFILL" = "gkg-hourly" ]; then
+            wimcg gkg-import history/gkg-hourly.parquet
+          elif [ -n "$BACKFILL" ]; then
             wimcg backfill "$BACKFILL" --start "$DESDE" ${ATE:+--end "$ATE"}
           else
             wimcg update

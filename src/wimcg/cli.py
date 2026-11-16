@@ -1,4 +1,4 @@
-"""Linha de comando: `wimcg update | backfill | moves | news | datasets`."""
+"""Linha de comando: `wimcg update | backfill | moves | news | gkg-sql | gkg-pack | gkg-import | datasets`."""
 
 from __future__ import annotations
 
@@ -189,6 +189,43 @@ def cmd_gkg_sql(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gkg_pack(args: argparse.Namespace) -> int:
+    """Junta os CSVs exportados do BigQuery (consulta de `gkg-sql`) num Parquet compacto."""
+    from wimcg import gkg
+
+    try:
+        df = gkg.pack([gkg.read_bigquery_csv(p) for p in args.files])
+    except (OSError, ValueError) as exc:
+        _error(f"gkg-pack: {exc}")
+        return 1
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+    gkg.write_history(df, args.out)
+    first, last = df["time"].min(), df["time"].max()
+    missing = int((last - first) / timedelta(hours=1)) + 1 - len(df)
+    log.info("%s: %d horas, de %s a %s (%d horas sem dados no GDELT)", args.out, len(df), f"{first:%Y-%m-%d %H}h", f"{last:%Y-%m-%d %H}h", missing)
+    return 0
+
+
+def cmd_gkg_import(args: argparse.Namespace) -> int:
+    """Grava no armazenamento o histórico gerado por `gkg-pack`."""
+    from wimcg import gkg
+    from wimcg import storage as storage_mod
+    from wimcg.pipeline.writer import write_catalog, write_dataset
+
+    try:
+        df = gkg.read_history(args.file)
+    except (OSError, ValueError) as exc:
+        _error(f"gkg-import: {exc}")
+        return 1
+    store = storage_mod.from_env()
+    now = datetime.now(UTC)
+    result = write_dataset(store, catalog.get("gkg-hourly"), df, now=now)
+    write_catalog(store, list(catalog.DATASETS), now=now)
+    store.commit(f"gkg-hourly: {df['time'].min():%Y-%m-%d} a {df['time'].max():%Y-%m-%d %H}h, {len(df)} horas")
+    log.info("gkg-hourly: %d horas em %d partições", result.rows, len(result.partitions))
+    return 0
+
+
 def cmd_datasets(args: argparse.Namespace) -> int:
     for ds in catalog.DATASETS:
         print(f"{ds.id:<14} {ds.cadence:<8} {ds.provider}")
@@ -222,6 +259,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", required=True, help="início, inclusive (ex.: 2015-02-19)")
     p.add_argument("--end", required=True, help="fim, exclusive (ex.: 2021-01-01)")
     p.set_defaults(func=cmd_gkg_sql)
+
+    p = sub.add_parser("gkg-pack", help="junta os CSVs exportados do BigQuery (resultado de gkg-sql) num Parquet")
+    p.add_argument("files", nargs="+", help="arquivos .csv ou .csv.gz")
+    p.add_argument("--out", default="history/gkg-hourly.parquet")
+    p.set_defaults(func=cmd_gkg_pack)
+
+    p = sub.add_parser("gkg-import", help="grava o Parquet de gkg-pack no dataset gkg-hourly")
+    p.add_argument("file", nargs="?", default="history/gkg-hourly.parquet")
+    p.set_defaults(func=cmd_gkg_import)
 
     p = sub.add_parser("datasets", help="lista os datasets do catálogo")
     p.set_defaults(func=cmd_datasets)

@@ -18,8 +18,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:  # o catálogo importa TOPICS sem carregar o pandas
+    import pandas as pd
 
 TABLE = "gdelt-bq.gdeltv2.gkg_partitioned"
 BITCOIN = "ECON_BITCOIN"
@@ -107,6 +109,8 @@ ORDER BY time
 
 def aggregate(records: pd.DataFrame) -> pd.DataFrame:
     """Mesmas séries de `sql`, a partir de linhas do GKG com as colunas DATE, Themes e V2Tone."""
+    import pandas as pd
+
     if records.empty:
         return pd.DataFrame(columns=columns())
     time = pd.to_datetime(records["DATE"].astype("int64").astype(str), format="%Y%m%d%H%M%S", utc=True).dt.floor("h")
@@ -130,3 +134,46 @@ def aggregate(records: pd.DataFrame) -> pd.DataFrame:
             out[f"world_{tp.name}_articles"] = g[f"is_{tp.name}"].sum()
     out[["tone", "btc_tone"]] = out[["tone", "btc_tone"]].round(4)
     return out.reset_index()[columns()]
+
+
+def _check(df: pd.DataFrame, where: str) -> None:
+    # Um arquivo de uma versão antiga da consulta gravaria colunas trocadas.
+    if list(df.columns) != columns():
+        raise ValueError(f"{where}: colunas diferentes das de gkg.columns() (consulta de outra versão?)")
+    if df["time"].duplicated().any():
+        raise ValueError(f"{where}: horas repetidas")
+
+
+def read_bigquery_csv(path) -> pd.DataFrame:
+    """Lê o resultado de `sql` exportado do BigQuery como CSV (aceita .csv.gz)."""
+    import pandas as pd
+
+    df = pd.read_csv(path)
+    # O BigQuery exporta "2015-02-19 00:00:00 UTC".
+    df["time"] = pd.to_datetime(df["time"].astype(str).str.removesuffix(" UTC"), utc=True, format="%Y-%m-%d %H:%M:%S")
+    _check(df, str(path))
+    return df
+
+
+def pack(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Junta resultados de `sql` em uma tabela ordenada, recusando horas repetidas entre eles."""
+    import pandas as pd
+
+    df = pd.concat(frames, ignore_index=True).sort_values("time", ignore_index=True)
+    _check(df, "arquivos juntos")
+    counts = [c for c in columns() if c.endswith("_articles") or c == "articles"]
+    df[counts] = df[counts].astype("int32")  # cabem com folga e o arquivo fica menor
+    return df
+
+
+def write_history(df: pd.DataFrame, path) -> None:
+    """Grava o histórico em Parquet compacto (zstd no nível máximo útil): ~3 MB para 2015-2026."""
+    df.to_parquet(path, index=False, compression="zstd", compression_level=19)
+
+
+def read_history(path) -> pd.DataFrame:
+    import pandas as pd
+
+    df = pd.read_parquet(path)
+    _check(df, str(path))
+    return df

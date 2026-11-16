@@ -12,7 +12,9 @@ from typing import Literal
 FieldType = Literal["float", "int", "str", "bool", "time"]
 Partition = Literal["day", "month", "year"]
 # "derived": produzido pelo próprio projeto (ex.: grandes movimentos), não por um conector.
-Schedule = Literal["realtime", "daily", "derived"]
+# "manual": carregado por um comando próprio (ex.: histórico exportado do BigQuery), sem coleta
+# automática ainda.
+Schedule = Literal["realtime", "daily", "derived", "manual"]
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,26 @@ class Dataset:
 
 def _time(desc: str) -> Field:
     return Field("time", "time", None, desc)
+
+
+def _gkg_fields() -> tuple[Field, ...]:
+    """Campos de gkg-hourly, gerados das mesmas definições da consulta (wimcg.gkg.TOPICS)."""
+    from wimcg.gkg import TOPICS
+
+    fields = [
+        _time("Início da hora (UTC), pelo campo DATE do GKG"),
+        Field("articles", "int", "notícias", "Notícias no GKG na hora (todas, do mundo inteiro)"),
+        Field("tone", "float", None, "Tom médio das notícias (V2Tone, de -100 a +100; na prática entre -10 e +10)"),
+        Field("btc_articles", "int", "notícias", "Notícias com o tema ECON_BITCOIN"),
+        Field("btc_tone", "float", None, "Tom médio das notícias de bitcoin (vazio se não houve nenhuma)"),
+    ]
+    for tp in TOPICS:
+        if tp.bitcoin:
+            fields.append(Field(f"btc_{tp.name}_articles", "int", "notícias", f"Notícias de bitcoin com algum destes temas: {', '.join(tp.themes)}"))
+    for tp in TOPICS:
+        if tp.world:
+            fields.append(Field(f"world_{tp.name}_articles", "int", "notícias", f"Notícias do mundo com algum destes temas: {', '.join(tp.themes)}"))
+    return tuple(fields)
 
 
 DATASETS: tuple[Dataset, ...] = (
@@ -167,6 +189,27 @@ DATASETS: tuple[Dataset, ...] = (
         ),
         schedule="derived",
         notes="O horário é quando o GDELT viu a notícia, que pode vir minutos depois da publicação.",
+    ),
+    Dataset(
+        id="gkg-hourly",
+        title="Notícias por hora: bitcoin e assuntos do mundo (GDELT GKG)",
+        description="Contagem e tom médio das notícias do GKG do GDELT a cada hora, desde "
+        "fevereiro de 2015: todas, as de bitcoin e as de assuntos que podem mover o mercado "
+        "(juros, bolsas, regulação, ataques hackers, guerras, sanções, incerteza).",
+        provider="GDELT Project (GKG 2.0, via Google BigQuery)",
+        source_url="https://www.gdeltproject.org/data.html#rawdatafiles",
+        license="GDELT: uso livre com citação.",
+        cadence="1h",
+        partition="month",
+        key=("time",),
+        fields=_gkg_fields(),
+        schedule="manual",
+        # Em JSON seriam ~54 MB (contra ~7 MB em Parquet), sem uso até a API existir.
+        json_partitions=False,
+        notes="Horas em que o GDELT não publicou nada não têm linha (a maior falha vai de 14/06 a "
+        "02/07/2025). Algumas horas têm pouquíssimas notícias por falha parcial do GDELT: compare "
+        "com `articles` antes de usar as contagens. Os temas de EPU_UNCERTAINTY só se firmam em "
+        "2016; antes disso trate world_uncertainty_articles como ausente.",
     ),
 )
 

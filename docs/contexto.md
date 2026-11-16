@@ -56,7 +56,17 @@ acordos de paz.
 - **Histórico longo de notícias:** a API de busca é limitada demais, e os arquivos brutos somam
   terabytes. **Caminho escolhido:** o GDELT no Google BigQuery (base pública; o sandbox gratuito
   dá 1 TB de consulta por mês, sem cartão), extraindo contagens e tom por hora desde 2015.
-  Ainda não foi feito: depende de o autor ativar o sandbox.
+  **Feito em 16/11/2026:** a consulta de `wimcg gkg-sql` rodou no console do BigQuery em dois
+  pedaços (2015-02-19 a 2020-12-31 e 2021-01-01 a 2026-11-15) e foi exportada em CSV (~10 MB).
+  O `wimcg gkg-pack` a guardou em `history/gkg-hourly.parquet` (3,2 MB), e o Actions a grava no
+  dataset `gkg-hourly` do Hugging Face. Conferência:
+  - são 101.789 horas, sem repetição; 1.123 horas faltam no próprio GDELT, em 131 blocos. O
+    maior vai de 14/06 a 02/07/2025 (416 h), e em out-nov/2020 faltam várias madrugadas;
+  - 29 horas têm menos de 500 notícias (falha parcial do GDELT): não tratar como zero;
+  - o total de notícias por hora cai de ~25 mil (2015) para ~12 mil (2026): usar proporções;
+  - `world_uncertainty` é quase nula em 2015 (13/h, contra ~300 em 2016).
+  - **Lição:** não mandar arquivos grandes pelo chat do Claude Code, que estoura o limite da
+    conversa. Basta dizer onde estão.
 - **Lição do Future Space:** o Open-Meteo passou a recusar conexões vindas do GitHub Actions
   (IPs compartilhados). Por isso as fontes auxiliares são marcadas como não críticas: se
   falharem, a coleta segue e só registra um aviso.
