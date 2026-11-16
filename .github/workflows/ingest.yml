@@ -7,6 +7,19 @@ on:
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Opcional: dataset para carregar o histórico (btc-usd-1m ou fear-greed). Se preenchido, roda só isso."
+        type: string
+        default: ""
+      desde:
+        description: "Data inicial do histórico (ex.: 2015-07-20)"
+        type: string
+        default: "2015-07-20"
+      ate:
+        description: "Opcional: data final do histórico (ex.: 2017-01-01). Vazio = agora."
+        type: string
+        default: ""
 
 # O GITHUB_TOKEN deste workflow só pode ler o repositório.
 permissions:
@@ -20,7 +33,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A coleta normal leva ~2 min; o limite maior é para as cargas históricas.
+    timeout-minutes: 300
     env:
       FS_STORAGE: hf
       FS_HF_REPO: ${{ vars.FS_HF_REPO }}
@@ -51,7 +65,15 @@ jobs:
       - name: Coletar
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: wimcg update
+          BACKFILL: ${{ inputs.backfill }}
+          DESDE: ${{ inputs.desde }}
+          ATE: ${{ inputs.ate }}
+        run: |
+          if [ -n "$BACKFILL" ]; then
+            wimcg backfill "$BACKFILL" --start "$DESDE" ${ATE:+--end "$ATE"}
+          else
+            wimcg update
+          fi
       - name: Atualizar grandes movimentos
         if: ${{ !cancelled() }}
         env:
