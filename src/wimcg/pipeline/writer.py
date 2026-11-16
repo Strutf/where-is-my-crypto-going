@@ -22,6 +22,7 @@ from wimcg.partitions import (
     TIME_FORMAT,
     format_time,
     json_key,
+    label,
     latest_key,
     manifest_key,
     parquet_key,
@@ -97,32 +98,55 @@ def _merge(old: pd.DataFrame | None, new: pd.DataFrame, ds: Dataset) -> pd.DataF
 
 
 def write_dataset(
-    storage: Storage, ds: Dataset, df: pd.DataFrame, now: datetime | None = None
+    storage: Storage,
+    ds: Dataset,
+    df: pd.DataFrame,
+    now: datetime | None = None,
+    replace_from: datetime | None = None,
 ) -> WriteResult:
+    """Mescla `df` com o que já está gravado.
+
+    `replace_from` serve a dados derivados que são recalculados: as linhas já gravadas com
+    `time >= replace_from` são trocadas pelas de `df`, e as que sumiram do recálculo são apagadas.
+    """
     now = now or datetime.now(UTC)
     df = coerce(df, ds)
-    if df.empty:
-        return WriteResult(ds.id, 0, [])
+    raw = storage.read(manifest_key(ds.id))
+    manifest = json.loads(raw) if raw else {"dataset": ds.id, "partitions": []}
 
     labels = df["time"].dt.strftime(_PARTITION_FORMAT[ds.partition])
+    parts = {lbl: part for lbl, part in df.groupby(labels, sort=True)}
+    if replace_from is not None:
+        # Partições já gravadas que podem ter linhas a apagar, mesmo sem linhas novas.
+        first = label(replace_from, ds.partition)
+        for lbl in manifest["partitions"]:
+            if lbl >= first:
+                parts.setdefault(lbl, df.iloc[0:0])
+    if not parts:
+        return WriteResult(ds.id, 0, [])
+
     merged: dict[str, pd.DataFrame] = {}
-    for lbl, part in df.groupby(labels, sort=True):
-        full = _merge(read_parquet(storage, parquet_key(ds.id, lbl)), part, ds)
+    for lbl in sorted(parts):
+        old = read_parquet(storage, parquet_key(ds.id, lbl))
+        if old is not None and replace_from is not None:
+            old = old[pd.to_datetime(old["time"], utc=True) < replace_from]
+        full = _merge(old, parts[lbl], ds)
         storage.write(parquet_key(ds.id, lbl), to_parquet_bytes(full))
         if ds.json_partitions:
             storage.write(json_key(ds.id, lbl), _json_bytes(to_records(full, ds)))
         merged[lbl] = full
 
-    raw = storage.read(manifest_key(ds.id))
-    manifest = json.loads(raw) if raw else {"dataset": ds.id, "partitions": []}
     partitions = sorted(set(manifest["partitions"]) | set(merged))
-    starts = [format_time(df["time"].min())] + ([manifest["start"]] if manifest.get("start") else [])
-    ends = [format_time(df["time"].max())] + ([manifest["end"]] if manifest.get("end") else [])
+    starts = [manifest["start"]] if manifest.get("start") else []
+    ends = [manifest["end"]] if manifest.get("end") else []
+    if not df.empty:
+        starts.append(format_time(df["time"].min()))
+        ends.append(format_time(df["time"].max()))
     manifest.update(
         partitions=partitions,
         partition=ds.partition,
-        start=min(starts),
-        end=max(ends),
+        start=min(starts, default=None),
+        end=max(ends, default=None),
         updated_at=format_time(now),
     )
     storage.write(manifest_key(ds.id), _json_bytes(manifest))

@@ -41,7 +41,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,hf]"
 wimcg update                                  # dados recentes
 wimcg backfill btc-usd-1m --start 2015-07-20  # histórico (blocos de 30 dias)
-wimcg moves                                   # grandes movimentos
+wimcg moves                                   # grandes movimentos recentes (--full: histórico inteiro)
 wimcg news --limit 20                         # notícias dos maiores movimentos (GDELT)
 wimcg gkg-sql --start 2015-02-19 --end 2021-01-01   # consulta do BigQuery (notícias por hora)
 wimcg gkg-pack a.csv b.csv                    # CSVs do BigQuery -> history/gkg-hourly.parquet

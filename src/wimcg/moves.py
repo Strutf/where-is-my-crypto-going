@@ -16,12 +16,20 @@ SCALES_HOURS = (1, 24)
 K_SIGMA = 3.0
 WINDOW_DAYS = 30
 MIN_HISTORY_DAYS = 20
+# No dia a dia, só os movimentos que terminaram nos últimos RECENT_DAYS são recalculados (um
+# movimento em andamento ainda pode mudar de hora representativa). Os mais antigos não mudam.
+RECENT_DAYS = 14
+# Velas necessárias para recalcular esse período: a janela da volatilidade típica, mais a maior
+# escala (24 h) e uma folga.
+HISTORY_DAYS = RECENT_DAYS + WINDOW_DAYS + 2
 
 
 def hourly_close(candles: pd.DataFrame) -> pd.Series:
     """Preço de fechamento ao fim de cada hora (índice = fim da hora, UTC)."""
     close = candles.set_index("time")["close"].sort_index()
     hourly = close.resample("h", label="right", closed="left").last()
+    # A hora em andamento fica de fora: só entra depois de fechada (última vela = minuto 59).
+    hourly = hourly[hourly.index <= close.index[-1] + pd.Timedelta(minutes=1)]
     # Horas sem negociação ficam com o último preço conhecido (até 6 h).
     return hourly.ffill(limit=6)
 

@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 
 from wimcg import catalog
-from wimcg.partitions import manifest_key, parquet_key, parse_time
+from wimcg.partitions import label, manifest_key, parquet_key, parse_time
 
 log = logging.getLogger("wimcg")
 
@@ -34,14 +34,21 @@ def _warning(message: str) -> None:
         print(f"::warning::{message}", flush=True)
 
 
-def load_dataset(store, dataset_id: str):
-    """Lê todas as partições Parquet de um dataset (vazio se ainda não houver dados)."""
+def load_dataset(store, dataset_id: str, start: datetime | None = None, columns: list[str] | None = None):
+    """Lê as partições Parquet de um dataset (vazio se ainda não houver dados).
+
+    Com `start`, lê só a partir da partição que contém esse instante.
+    """
     import pandas as pd
 
+    ds = catalog.get(dataset_id)
     raw = store.read(manifest_key(dataset_id))
-    if not raw:
-        return pd.DataFrame(columns=catalog.get(dataset_id).columns)
-    frames = [pd.read_parquet(io.BytesIO(store.read(parquet_key(dataset_id, lbl)))) for lbl in json.loads(raw)["partitions"]]
+    labels = json.loads(raw)["partitions"] if raw else []
+    if start is not None:
+        labels = [lbl for lbl in labels if lbl >= label(start, ds.partition)]
+    if not labels:
+        return pd.DataFrame(columns=columns or ds.columns)
+    frames = [pd.read_parquet(io.BytesIO(store.read(parquet_key(dataset_id, lbl))), columns=columns) for lbl in labels]
     return pd.concat(frames, ignore_index=True)
 
 
@@ -130,20 +137,33 @@ def cmd_backfill(args: argparse.Namespace) -> int:
 
 
 def cmd_moves(args: argparse.Namespace) -> int:
+    """Recalcula os grandes movimentos: os recentes no dia a dia, todos com --full."""
+    import pandas as pd
+
     from wimcg import storage as storage_mod
-    from wimcg.moves import detect, hourly_close
+    from wimcg.moves import HISTORY_DAYS, RECENT_DAYS, detect, hourly_close
     from wimcg.pipeline.writer import write_catalog, write_dataset
 
     store = storage_mod.from_env()
-    candles = load_dataset(store, "btc-usd-1m")
-    if candles.empty:
+    ds = catalog.get("big-moves")
+    raw = store.read(manifest_key("btc-usd-1m"))
+    if not raw:
         _error("sem velas: rode `wimcg backfill btc-usd-1m --start 2015-07-20` antes")
         return 1
+    last = parse_time(json.loads(raw)["end"])
+    # Sem nenhum movimento gravado ainda, calcula o histórico inteiro.
+    full = args.full or not store.read(manifest_key(ds.id))
+    cutoff = None if full else last - timedelta(days=RECENT_DAYS)
+    start = None if full else last - timedelta(days=HISTORY_DAYS)
+    candles = load_dataset(store, "btc-usd-1m", start=start, columns=["time", "close"])
     moves = detect(hourly_close(candles))
+    if cutoff is not None:
+        moves = moves[moves["time"] >= cutoff]
     now = datetime.now(UTC)
-    write_dataset(store, catalog.get("big-moves"), moves, now=now)
+    write_dataset(store, ds, moves, now=now, replace_from=cutoff or pd.Timestamp(0, tz="UTC"))
     write_catalog(store, list(catalog.DATASETS), now=now)
     store.commit(f"grandes movimentos até {candles['time'].max():%Y-%m-%d %H:%M}Z")
+    log.info("velas desde %s (%s)", f"{candles['time'].min():%Y-%m-%d}", "histórico inteiro" if full else f"movimentos dos últimos {RECENT_DAYS} dias")
     for scale, g in moves.groupby("scale_hours"):
         log.info("escala %d h: %d movimentos (%d de alta, %d de baixa)", scale, len(g), (g.direction == "up").sum(), (g.direction == "down").sum())
     return 0
@@ -248,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_backfill)
 
     p = sub.add_parser("moves", help="detecta os grandes movimentos a partir das velas")
+    p.add_argument("--full", action="store_true", help="recalcula o histórico inteiro (padrão: só o período recente)")
     p.set_defaults(func=cmd_moves)
 
     p = sub.add_parser("news", help="busca as notícias de antes, durante e depois de cada grande movimento")

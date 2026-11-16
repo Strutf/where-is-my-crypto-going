@@ -80,4 +80,11 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: wimcg moves
+          BACKFILL: ${{ inputs.backfill }}
+        # Depois de uma carga histórica de velas, recalcula tudo; no dia a dia, só o período recente.
+        run: |
+          if [ "$BACKFILL" = "btc-usd-1m" ]; then
+            wimcg moves --full
+          else
+            wimcg moves
+          fi
