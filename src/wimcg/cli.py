@@ -92,13 +92,13 @@ def cmd_update(args: argparse.Namespace) -> int:
 
 
 def cmd_backfill(args: argparse.Namespace) -> int:
-    """Baixa o histórico em blocos de 30 dias, gravando cada bloco (dá para interromper e retomar)."""
+    """Baixa o histórico em blocos, gravando cada bloco (dá para interromper e retomar)."""
     ds = catalog.get(args.dataset)
     end = parse_time(args.end) if args.end else datetime.now(UTC)
     cur = parse_time(args.start)
     status = 0
     while cur < end:
-        nxt = min(cur + timedelta(days=30), end)
+        nxt = min(cur + timedelta(days=ds.backfill_chunk_days), end)
         log.info("%s: %s a %s", ds.id, f"{cur:%Y-%m-%d}", f"{nxt:%Y-%m-%d}")
         status |= _run([ds], cur, nxt)
         cur = nxt

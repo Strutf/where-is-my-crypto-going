@@ -43,6 +43,8 @@ class Dataset:
     latest_group: tuple[str, ...] = ()
     # True quando a fonte oferece histórico longo e `wimcg backfill` faz sentido.
     historical: bool = False
+    # Tamanho de cada bloco do backfill (um commit por bloco): pequeno para dados de 1 minuto.
+    backfill_chunk_days: int = 3650
     # False para datasets grandes demais para a API: só Parquet.
     json_partitions: bool = True
     latest_json: bool = True
@@ -91,6 +93,7 @@ DATASETS: tuple[Dataset, ...] = (
         ),
         schedule="realtime",
         historical=True,
+        backfill_chunk_days=30,
         json_partitions=False,
     ),
     Dataset(
