@@ -4,7 +4,7 @@
 # Uso: pip install -c requirements-pipeline.txt ".[hf]"
 anyio==4.16.0
 certifi==2026.10.23
-filelock==4.2.9
+filelock==4.2.10
 fsspec==2026.9.0
 h11==0.16.0
 hf-xet==1.8.0
