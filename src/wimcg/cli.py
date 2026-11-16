@@ -182,6 +182,13 @@ def cmd_news(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gkg_sql(args: argparse.Namespace) -> int:
+    from wimcg import gkg
+
+    print(gkg.sql(parse_time(args.start), parse_time(args.end)))
+    return 0
+
+
 def cmd_datasets(args: argparse.Namespace) -> int:
     for ds in catalog.DATASETS:
         print(f"{ds.id:<14} {ds.cadence:<8} {ds.provider}")
@@ -210,6 +217,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", default="2017-01-01", help="só movimentos a partir desta data")
     p.add_argument("--limit", type=int, help="processa só os N maiores movimentos pendentes")
     p.set_defaults(func=cmd_news)
+
+    p = sub.add_parser("gkg-sql", help="imprime a consulta do BigQuery com as notícias por hora (GKG do GDELT)")
+    p.add_argument("--start", required=True, help="início, inclusive (ex.: 2015-02-19)")
+    p.add_argument("--end", required=True, help="fim, exclusive (ex.: 2021-01-01)")
+    p.set_defaults(func=cmd_gkg_sql)
 
     p = sub.add_parser("datasets", help="lista os datasets do catálogo")
     p.set_defaults(func=cmd_datasets)
