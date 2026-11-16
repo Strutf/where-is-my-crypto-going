@@ -15,6 +15,10 @@ from wimcg.partitions import manifest_key, parquet_key, parse_time
 
 log = logging.getLogger("wimcg")
 
+# Até quanto tempo para trás o `update` recupera sozinho um buraco nos dados (ex.: execuções
+# canceladas enquanto uma carga histórica ocupava o Actions). Acima disso, use `backfill`.
+MAX_CATCHUP = timedelta(days=30)
+
 
 def _error(message: str) -> None:
     """Loga o erro e, no GitHub Actions, também o publica como anotação da execução."""
@@ -41,6 +45,26 @@ def load_dataset(store, dataset_id: str):
     return pd.concat(frames, ignore_index=True)
 
 
+def update_start(store, ds: catalog.Dataset, end: datetime) -> datetime:
+    """Início da busca do `update`: as últimas `update_hours` ou, se houver um buraco, o último
+    dado gravado (limitado a MAX_CATCHUP)."""
+    start = end - timedelta(hours=ds.update_hours)
+    raw = store.read(manifest_key(ds.id))
+    last = json.loads(raw).get("end") if raw else None
+    if not last:
+        return start
+    last_dt = parse_time(last)
+    if last_dt < end - MAX_CATCHUP:
+        _warning(
+            f"{ds.id}: último dado em {last}, há mais de {MAX_CATCHUP.days} dias; "
+            f"recuperando só os últimos {MAX_CATCHUP.days} (use `wimcg backfill` para o resto)"
+        )
+        return min(start, end - MAX_CATCHUP)
+    if last_dt < start:
+        log.info("%s: buraco desde %s; recuperando", ds.id, last)
+    return min(start, last_dt)
+
+
 def _run(datasets: list[catalog.Dataset], start: datetime | None, end: datetime) -> int:
     from wimcg import storage as storage_mod
     from wimcg.pipeline.connectors import CONNECTORS
@@ -56,8 +80,8 @@ def _run(datasets: list[catalog.Dataset], start: datetime | None, end: datetime)
     failures, written = [], []
     with make_client() as client:
         for ds in datasets:
-            ds_start = start or end - timedelta(hours=ds.update_hours)
             try:
+                ds_start = start or update_start(store, ds, end)
                 result = write_dataset(store, ds, CONNECTORS[ds.id](client, ds_start, end), now=end)
             except Exception as exc:  # noqa: BLE001 - uma fonte fora do ar não deve parar as outras
                 (_error if ds.critical else _warning)(f"{ds.id}: falhou: {exc}")
