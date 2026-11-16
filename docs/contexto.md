@@ -41,6 +41,12 @@ acordos de paz.
     vários minutos depois de poucas consultas;
   - nas manchetes do dia da queda, a maioria **descrevia** a queda ("crash accelerates", "what's
     going on?"). É o que motivou a separação antes, durante e depois.
+  - **modos de série temporal** (`timelinevolraw`, `timelinetone`): com janelas de uma semana,
+    devolvem valores **por hora** (artigos, total monitorado e tom médio). Só aceitam datas a
+    partir de 2017 ("Invalid query start date" para 2015);
+  - **dos servidores do GitHub Actions** (workflow `gdelt-probe`, 16/11/2026): só 5 de 20
+    consultas passaram, mesmo com ~20 s entre elas; as outras levaram 429. Os IPs compartilhados
+    do Actions já gastam o limite. **Não serve para cargas grandes no Actions.**
 - **GDELT, arquivos brutos (GKG, a cada 15 min):**
   - ~7 MB por arquivo, sem limite de requisições;
   - as notícias de cripto vêm marcadas com o tema `ECON_BITCOIN`;
