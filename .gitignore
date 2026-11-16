@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.env
+.vercel/
+
+# Dados locais gerados pelo pipeline (o arquivo oficial fica no Hugging Face)
+data/
+
+# Modelos treinados (artefatos binários; serão publicados no Hugging Face)
+models/

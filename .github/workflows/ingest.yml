@@ -1,0 +1,59 @@
+name: ingest
+
+# Coleta a cada 15 minutos (preço de 1 min e Fear & Greed) e atualiza os grandes movimentos.
+# Como no Future Space, o disparo principal pode vir de fora (cron-job.org chamando
+# workflow_dispatch); o on.schedule fica como reserva.
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+# O GITHUB_TOKEN deste workflow só pode ler o repositório.
+permissions:
+  contents: read
+
+# Só um job grava no Hugging Face por vez.
+concurrency:
+  group: hf-writes
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FS_STORAGE: hf
+      FS_HF_REPO: ${{ vars.FS_HF_REPO }}
+    steps:
+      - name: Verificar configuração
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          ok=true
+          if [ -z "$FS_HF_REPO" ]; then
+            echo "::error::Variável FS_HF_REPO ausente (Settings > Secrets and variables > Actions > Variables)."
+            ok=false
+          fi
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::Secret HF_TOKEN ausente (Settings > Secrets and variables > Actions > Secrets)."
+            ok=false
+          fi
+          $ok
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      # Instalação sem o token no ambiente: código de terceiros não consegue lê-lo.
+      - run: pip install -c requirements-pipeline.txt ".[hf]"
+      - name: Coletar
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: wimcg update
+      - name: Atualizar grandes movimentos
+        if: ${{ !cancelled() }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: wimcg moves
