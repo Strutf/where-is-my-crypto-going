@@ -286,7 +286,9 @@ Plano:
 - **Design (aprovado em 17/11/2026):** pixel art, para fugir do visual genérico de IA. Modo
   claro com a paleta Inverno (gelo e laranja), modo escuro com a Fósforo (monitor âmbar, com
   linhas de varredura); o site segue o tema do aparelho e tem um botão para trocar. Fontes
-  Pixelify Sans (títulos e texto), VT323 (números) e Silkscreen (rótulos). Sem cantos
+  (opção A, escolhida em 17/11/2026, depois de o autor achar o texto todo em pixel difícil de
+  ler): Pixelify Sans nos títulos e rótulos, Atkinson Hyperlegible no texto e IBM Plex Mono nos
+  números. Sem cantos
   arredondados, bordas de 3 px com cantos cortados, sombra dura, espaçamento em múltiplos de 4 px;
   alta e baixa sempre com seta ou palavra, nunca só pela cor. Gráfico desenhado em 240 x 80 pontos
   e ampliado sem suavizar; neve e poeira da cena feitas por código, personagens só por imagem.
