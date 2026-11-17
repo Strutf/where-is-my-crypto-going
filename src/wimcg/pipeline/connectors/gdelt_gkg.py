@@ -36,6 +36,7 @@ import httpx
 import pandas as pd
 
 from wimcg import gkg
+from wimcg.news import title_mentions_crypto
 from wimcg.pipeline.http import get
 
 log = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ QUARTERS = (0, 15, 30, 45)
 PATIENCE = timedelta(hours=2)
 # Posição dos campos no GKG 2.1 (27 campos separados por tabulação, sem cabeçalho).
 N_FIELDS, DATE, DOMAIN, URL, THEMES, TONE, TRANSLATION, EXTRAS = 27, 1, 3, 4, 7, 15, 25, 26
-NEWS_COLUMNS = ["time", "url", "title", "domain", "language", "tone", "topics"]
+NEWS_COLUMNS = ["time", "url", "title", "in_title", "domain", "language", "tone", "topics"]
 MAX_TITLE = 300
 _TITLE = re.compile(rb"<PAGE_TITLE>(.*?)</PAGE_TITLE>", re.DOTALL)
 _LANGUAGE = re.compile(rb"srclc:([a-z]+)")
@@ -86,14 +87,16 @@ def parse(content: bytes, translated: bool) -> tuple[pd.DataFrame, pd.DataFrame]
         themes = set(fields[THEMES].split(b";"))
         if _BITCOIN in themes:
             names = {t.decode() for t in themes}
-            title = _TITLE.search(fields[EXTRAS])
+            found = _TITLE.search(fields[EXTRAS])
+            # O título vem no idioma original, com entidades HTML (&#x2013;).
+            title = html.unescape(_text(found.group(1))).strip()[:MAX_TITLE] if found else None
             language = _LANGUAGE.search(fields[TRANSLATION])
             news.append(
                 {
                     "time": pd.to_datetime(_text(fields[DATE]), format="%Y%m%d%H%M%S", utc=True),
                     "url": _text(fields[URL]),
-                    # O título vem no idioma original, com entidades HTML (&#x2013;).
-                    "title": html.unescape(_text(title.group(1))).strip()[:MAX_TITLE] if title else None,
+                    "title": title,
+                    "in_title": title_mentions_crypto(title),
                     "domain": _text(fields[DOMAIN]),
                     "language": _text(language.group(1)) if language else "eng",
                     "tone": pd.to_numeric(_text(fields[TONE]).split(",")[0], errors="coerce"),

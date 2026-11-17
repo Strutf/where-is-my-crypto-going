@@ -45,7 +45,24 @@ CATEGORIES: dict[str, tuple[str, ...]] = {
 }
 _PATTERNS = {cat: re.compile(r"\b(" + "|".join(re.escape(w) for w in words) + r")\b") for cat, words in CATEGORIES.items()}
 
+# Termos que mostram que o título trata de bitcoin ou de criptomoedas, em vários idiomas. O tema
+# ECON_BITCOIN do GDELT também marca notícias que só citam bitcoin no meio do texto.
+_CRYPTO_TITLE = re.compile(
+    r"bitcoin|\bbtc\b|crypto|cripto|krypto|kripto|blockchain|stablecoin|altcoin|memecoin|"
+    r"ethereum|\beth\b|\bxrp\b|dogecoin|solana|binance|coinbase|"
+    r"биткоин|биткойн|крипто|блокчейн|"
+    r"比特币|比特幣|加密货币|加密貨幣|虚拟货币|虛擬貨幣|区块链|區塊鏈|"
+    r"비트코인|가상화폐|암호화폐|가상자산|ビットコイン|暗号資産|仮想通貨|"
+    r"بيتكوين|بتكوين|العملات المشفرة|العملات الرقمية",
+    re.IGNORECASE,
+)
+
 _last_request = 0.0
+
+
+def title_mentions_crypto(title: str | None) -> bool:
+    """True se o título cita bitcoin ou criptomoedas."""
+    return bool(title) and _CRYPTO_TITLE.search(title) is not None
 
 
 def categorize(title: str) -> str:

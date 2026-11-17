@@ -120,6 +120,7 @@ def test_btc_news_reuses_the_files_read_for_the_hourly_counts():
     first = news.sort_values(["time", "language"]).iloc[0]
     assert first["time"] == pd.Timestamp("2026-02-05T10:00Z")
     assert (first["title"], first["domain"], first["language"]) == ("Bitcoin falls \u2013 again", "example.com", "eng")
+    assert first["in_title"]
     assert (first["url"], first["tone"], first["topics"]) == ("https://example.com/20260205100000/0", -2.0, "cyber")
     assert set(news["language"]) == {"eng", "por"}
 

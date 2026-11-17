@@ -45,3 +45,10 @@ def test_search_waits_and_retries_after_rate_limit(monkeypatch):
         assert news.search(client, pd.Timestamp("2026-01-01", tz="UTC"), pd.Timestamp("2026-01-02", tz="UTC")) == [
             {"title": "ok"}
         ]
+
+
+def test_title_mentions_crypto_in_several_languages():
+    for title in ("Bitcoin Dips Below US$65,000 on Rate Fears", "BTC falls again", "比特幣單月跌逾兩成", "비트코인 급락", "Курс биткоина упал", "Criptomoedas em queda"):
+        assert news.title_mentions_crypto(title), title
+    for title in ("Savannah Guthrie renews NBC contract", "The FTC Says Older Americans Reported $3 Billion in Fraud Losses", "Something about method", None, ""):
+        assert not news.title_mentions_crypto(title), title

@@ -248,6 +248,7 @@ DATASETS: tuple[Dataset, ...] = (
             _time("Arquivo de 15 min do GDELT em que a notícia apareceu (UTC)"),
             Field("url", "str", None, "Endereço da notícia"),
             Field("title", "str", None, "Título, no idioma original (vazio se o GDELT não o registrou)"),
+            Field("in_title", "bool", None, "True se o título cita bitcoin ou criptomoedas (ver wimcg.news)"),
             Field("domain", "str", None, "Veículo"),
             Field("language", "str", None, "Idioma original, no código do GDELT (eng = inglês)"),
             Field("tone", "float", None, "Tom da notícia (V2Tone; negativo = tom negativo)"),
@@ -260,8 +261,9 @@ DATASETS: tuple[Dataset, ...] = (
         historical=True,
         backfill_chunk_days=2,
         critical=False,
-        notes="O tema do GDELT é largo: entram notícias que só citam bitcoin de passagem. Uma "
-        "hora só é gravada depois que o GDELT publica todos os arquivos dela.",
+        notes="O tema do GDELT é largo: entram notícias que só citam bitcoin no meio do texto. "
+        "Para ficar só com as que tratam do assunto, filtre por in_title. Uma hora só é gravada "
+        "depois que o GDELT publica todos os arquivos dela.",
     ),
 )
 
