@@ -30,6 +30,12 @@ from wimcg.partitions import (
 )
 from wimcg.storage import Storage, reader_from_env
 
+# Chaves do armazenamento escritas por wimcg.ml.serve (repetidas aqui para a API não importar o
+# pacote de machine learning, que puxa o pandas).
+MODELS_POINTER = "models/current.json"
+MODELS_INDEX = "models/index.json"
+SUMMARY_KEY = "json/verification/summary.json"
+
 DISCLAIMER = "Projeto de estudo e pesquisa. Não é recomendação de investimento."
 DESCRIPTION = f"""
 Dados abertos do projeto **Where Is My Crypto Going?**: preço do Bitcoin, estado do mercado,
@@ -40,6 +46,11 @@ grandes movimentos e notícias. Toda tabela tem uma coluna `time` em UTC.
 - `GET /v1/datasets`: as tabelas que existem e a cobertura de cada uma
 - `GET /v1/datasets/{{id}}/latest`: os valores mais recentes
 - `GET /v1/datasets/{{id}}/data`: as linhas de um intervalo de tempo
+- `GET /v1/datasets/predictions/latest`: as previsões da última hora (direção e volatilidade)
+- `GET /v1/datasets/verification/data`: cada previsão comparada com o que aconteceu
+- `GET /v1/verification/summary`: acerto do modelo e das referências nos últimos 7 e 30 dias
+- `GET /v1/models/current`: o modelo em uso e a avaliação dele
+- `GET /v1/models`: todos os treinos, publicados ou recusados pela trava
 
 Cite sempre a fonte original indicada em `provider` e `license`.
 """
@@ -236,6 +247,27 @@ def create_app(storage: Storage | None = None, rate_limit_per_minute: int | None
             rows += [{c: r.get(c) for c in columns} for r in part or [] if lo <= r["time"] < hi]
         # Dados que mal mudam (anos fechados) poderiam ficar mais tempo em cache; 60 s serve a todos.
         return json_response({"dataset": ds.id, "start": lo, "end": hi, "count": len(rows), "data": rows}, 60)
+
+    @app.get("/v1/verification/summary", summary="Acerto das previsões e das referências")
+    def verification_summary():
+        payload = read_json(SUMMARY_KEY)
+        if payload is None:
+            raise HTTPException(404, "nenhuma previsão verificada ainda")
+        return json_response(payload, 300)
+
+    @app.get("/v1/models/current", summary="Modelo em uso e a avaliação dele")
+    def current_model():
+        pointer = read_json(MODELS_POINTER)
+        if pointer is None:
+            raise HTTPException(404, "nenhum modelo publicado ainda")
+        return json_response({"model_version": pointer["model_version"], **pointer.get("summary", {}), "disclaimer": DISCLAIMER}, 3600)
+
+    @app.get("/v1/models", summary="Histórico dos treinos")
+    def models_index():
+        payload = read_json(MODELS_INDEX)
+        if payload is None:
+            raise HTTPException(404, "nenhum treino registrado ainda")
+        return json_response(payload, 3600)
 
     return app
 

@@ -83,3 +83,25 @@ def test_vercel_entry_point_restores_the_rewritten_path(tmp_path, monkeypatch):
     spec.loader.exec_module(module)
     r = TestClient(module.app).get("/api/index", params={"__path": "v1/datasets"})
     assert r.status_code == 200 and json.loads(r.text)["datasets"]
+
+
+def test_model_and_verification_endpoints(tmp_path):
+    from wimcg.ml import serve
+
+    store = LocalStorage(tmp_path)
+    c = TestClient(create_app(store, rate_limit_per_minute=0))
+    assert c.get("/v1/verification/summary").status_code == 404
+    assert c.get("/v1/models/current").status_code == 404
+    store.write(serve.SUMMARY_KEY, json.dumps({"windows": {"7d": []}}).encode())
+    store.write(serve.MODELS_POINTER, json.dumps({"model_version": "v1-20261201", "bundle": "x", "report": "y", "summary": {"evaluation": {}}}).encode())
+    c = TestClient(create_app(store, rate_limit_per_minute=0))  # a API guarda as leituras por 60 s
+    assert c.get("/v1/verification/summary").json() == {"windows": {"7d": []}}
+    body = c.get("/v1/models/current").json()
+    assert body["model_version"] == "v1-20261201" and "disclaimer" in body
+
+
+def test_api_keys_match_the_serving_module():
+    from wimcg.api import app as api
+    from wimcg.ml import serve
+
+    assert (api.MODELS_POINTER, api.MODELS_INDEX, api.SUMMARY_KEY) == (serve.MODELS_POINTER, serve.MODELS_INDEX, serve.SUMMARY_KEY)

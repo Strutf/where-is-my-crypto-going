@@ -322,6 +322,70 @@ DATASETS: tuple[Dataset, ...] = (
         "Para ficar só com as que tratam do assunto, filtre por in_title. Uma hora só é gravada "
         "depois que o GDELT publica todos os arquivos dela.",
     ),
+    Dataset(
+        id="predictions",
+        title="Previsões do Bitcoin: direção e volatilidade (modelos do projeto)",
+        description="Previsões emitidas a cada hora pelos modelos do projeto para 1, 4 e 24 h: "
+        "a direção (com a probabilidade de alta), o retorno e a volatilidade, com as referências "
+        "simples conhecidas no mesmo instante. Cada hora é prevista uma única vez e nunca reescrita.",
+        provider="Where Is My Crypto Going?",
+        source_url="https://github.com/Strutf/where-is-my-crypto-going",
+        license="MIT. Previsões experimentais de pesquisa: não são recomendação de investimento.",
+        cadence="1h",
+        partition="month",
+        key=("time", "horizon_hours"),
+        fields=(
+            _time("Momento da emissão: fim da última hora fechada (UTC)"),
+            Field("horizon_hours", "int", "h", "Antecedência da previsão"),
+            Field("target_time", "time", None, "Quando o resultado fica conhecido (fim da hora-alvo)"),
+            Field("base_price", "float", "USD", "Preço de partida: fechamento da última hora fechada"),
+            Field("prob_up", "float", None, "Probabilidade de o preço estar acima do de partida no horizonte"),
+            Field("direction", "str", None, "up se prob_up > 0,5; down caso contrário"),
+            Field("pred_return_pct", "float", "%", "Retorno previsto até o horizonte"),
+            Field("pred_volatility_pct", "float", "%", "Volatilidade prevista no horizonte (raiz da soma dos quadrados dos retornos horários)"),
+            Field("reversal_direction", "str", None, "Referência: o contrário do que aconteceu nas últimas h horas"),
+            Field("persistence_volatility_pct", "float", "%", "Referência: a volatilidade das últimas h horas, no tamanho do horizonte"),
+            Field("model_version", "str", None, "Versão dos modelos"),
+        ),
+        schedule="derived",
+        latest_mode="snapshot",
+        notes="Não é recomendação de investimento. Na avaliação histórica, a direção não supera "
+        "regras simples (ver research/results/); fica publicada para verificação pública.",
+    ),
+    Dataset(
+        id="verification",
+        title="Verificação das previsões: o que o modelo disse e o que aconteceu",
+        description="Cada previsão de predictions comparada com o preço observado no horizonte: "
+        "se a direção acertou, o retorno e a volatilidade observados e as mesmas medidas das "
+        "referências simples (sempre alta, inverter a última direção, persistência).",
+        provider="Where Is My Crypto Going?",
+        source_url="https://github.com/Strutf/where-is-my-crypto-going",
+        license="MIT",
+        cadence="1h",
+        partition="month",
+        key=("time", "horizon_hours"),
+        fields=(
+            _time("Momento em que a previsão foi emitida (UTC)"),
+            Field("horizon_hours", "int", "h", "Antecedência da previsão"),
+            Field("target_time", "time", None, "Quando o resultado ficou conhecido"),
+            Field("base_price", "float", "USD", "Preço de partida"),
+            Field("observed_price", "float", "USD", "Preço no horizonte"),
+            Field("direction", "str", None, "Direção prevista"),
+            Field("prob_up", "float", None, "Probabilidade de alta prevista"),
+            Field("observed_direction", "str", None, "Direção observada (up se subiu)"),
+            Field("hit", "bool", None, "Se a direção prevista aconteceu"),
+            Field("always_up_hit", "bool", None, "Se a referência 'sempre alta' teria acertado"),
+            Field("reversal_hit", "bool", None, "Se a referência 'inverter a última direção' teria acertado"),
+            Field("pred_return_pct", "float", "%", "Retorno previsto"),
+            Field("observed_return_pct", "float", "%", "Retorno observado"),
+            Field("pred_volatility_pct", "float", "%", "Volatilidade prevista"),
+            Field("observed_volatility_pct", "float", "%", "Volatilidade observada"),
+            Field("persistence_volatility_pct", "float", "%", "Volatilidade prevista pela persistência (referência)"),
+            Field("model_version", "str", None, "Versão dos modelos"),
+        ),
+        schedule="derived",
+        latest_group=("horizon_hours",),
+    ),
 )
 
 BY_ID: dict[str, Dataset] = {d.id: d for d in DATASETS}

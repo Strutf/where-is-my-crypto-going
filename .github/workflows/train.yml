@@ -1,0 +1,52 @@
+name: train
+
+# Treino mensal dos modelos publicados (direção e volatilidade), como no Future Space: avalia mês
+# a mês desde 2019 e só substitui o modelo atual se a avaliação não piorar (trava em
+# src/wimcg/ml/train.py). O disparo principal pode vir de fora (cron-job.org chamando
+# workflow_dispatch), porque o agendamento do GitHub falha às vezes; o on.schedule fica de reserva.
+on:
+  schedule:
+    # Dia 1 de cada mês, de madrugada (UTC).
+    - cron: "17 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publicar mesmo se a avaliação for pior que a do modelo atual"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Mesmo grupo da coleta: só um job grava no Hugging Face por vez.
+concurrency:
+  group: hf-writes
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FS_STORAGE: hf
+      FS_HF_REPO: ${{ vars.FS_HF_REPO }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      # Instalação sem o token no ambiente: código de terceiros não consegue lê-lo.
+      - run: pip install -c requirements-pipeline.txt ".[pipeline,hf,ml]"
+      - name: Treinar, avaliar e publicar
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            wimcg train --publish
+          else
+            wimcg train --publish-if-better
+          fi

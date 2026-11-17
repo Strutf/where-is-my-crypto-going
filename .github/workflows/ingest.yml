@@ -61,7 +61,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       # Instalação sem o token no ambiente: código de terceiros não consegue lê-lo.
-      - run: pip install -c requirements-pipeline.txt ".[pipeline,hf]"
+      - run: pip install -c requirements-pipeline.txt ".[pipeline,hf,ml]"
       - name: Coletar
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -88,6 +88,16 @@ jobs:
           else
             wimcg derive
           fi
+      - name: Prever
+        if: ${{ !cancelled() && inputs.backfill == '' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: wimcg predict
+      - name: Verificar previsões
+        if: ${{ !cancelled() && inputs.backfill == '' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: wimcg verify
       # A busca do GDELT recusa a maioria das consultas vindas do Actions (IPs compartilhados),
       # por isso vai aos poucos: um movimento por execução, parando na primeira recusa.
       - name: Notícias dos grandes movimentos (aos poucos)

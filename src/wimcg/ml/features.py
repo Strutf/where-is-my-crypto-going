@@ -23,6 +23,8 @@ import pandas as pd
 from wimcg import gkg
 
 HORIZONS = (1, 4, 24)
+# Muda quando as variáveis mudam: entra no nome da versão dos modelos publicados.
+FEATURE_VERSION = 1
 HOUR = pd.Timedelta(hours=1)
 # Horas sem negociação ficam com o último preço conhecido (como no estado do mercado).
 MAX_FILL_HOURS = 6
@@ -150,7 +152,8 @@ def build(hourly: pd.DataFrame, state: pd.DataFrame, fear_greed: pd.DataFrame, n
     ):
         groups[name] = list(part.columns)
         parts.append(part)
-    table = pd.concat([*parts, targets(close)], axis=1)
+    # O fechamento não é variável (os modelos usam retornos); fica na tabela como preço de partida.
+    table = pd.concat([*parts, targets(close), close.rename("close")], axis=1)
     table = table[table.pop("has_candle")]
     table = table.replace([np.inf, -np.inf], np.nan)
     return table.rename_axis("time"), groups

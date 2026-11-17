@@ -1,4 +1,4 @@
-"""Linha de comando: `wimcg update | backfill | derive | moves | news | gkg-sql | gkg-pack | gkg-import | ml-data | ml-eval | ml-report | datasets`."""
+"""Linha de comando: `wimcg update | backfill | derive | moves | news | gkg-sql | gkg-pack | gkg-import | train | predict | verify | ml-data | ml-eval | ml-report | datasets`."""
 
 from __future__ import annotations
 
@@ -328,6 +328,102 @@ def cmd_gkg_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_train(args: argparse.Namespace) -> int:
+    """Treina os modelos publicados, avalia mês a mês e publica (ou não, pela trava)."""
+    import io
+
+    import joblib
+
+    from wimcg import storage as storage_mod
+    from wimcg.ml import serve
+    from wimcg.ml import train as train_mod
+
+    store = storage_mod.from_env()
+    # Revisão lida antes dos dados: as coletas não gravam ao mesmo tempo (grupo hf-writes).
+    revision = store.data_revision()
+    table, groups = train_mod.load_table(store)
+    from wimcg.ml.run import last_full_month
+
+    bundle, summary = train_mod.train(table, groups, args.last or last_full_month(), args.evaluate_from)
+    summary["reproducibility"]["data"] = {"storage": os.environ.get("FS_STORAGE", "local"), "repository": os.environ.get("FS_HF_REPO"), "revision": revision}
+    for kind in ("direction", "volatility"):
+        for h, m in summary["evaluation"][kind].items():
+            log.info("%s %s h: %s", kind, h, json.dumps({k: round(v, 4) if isinstance(v, float) else v for k, v in m.items()}))
+    buf = io.BytesIO()
+    joblib.dump(bundle, buf)
+
+    publish, reason = args.publish, "publicação forçada"
+    if args.publish_if_better:
+        current = serve.current_report(store)
+        if current is None:
+            publish, reason = True, "nenhum modelo publicado ainda"
+        else:
+            publish, reason = train_mod.compare(summary, current)
+            reason = f"comparado com {current['model_version']}: {reason}"
+        log.info("publicação %s: %s", "aprovada" if publish else "recusada", reason)
+    if publish:
+        serve.publish(store, buf.getvalue(), summary)
+        store.commit(f"modelos {summary['model_version']}")
+        log.info("publicado como %s", summary["model_version"])
+    elif args.publish_if_better:
+        serve.record_rejected(store, summary, reason)
+        store.commit(f"treino {summary['model_version']} não publicado")
+        _warning(f"modelo novo não publicado ({reason})")
+    return 0
+
+
+def cmd_predict(args: argparse.Namespace) -> int:
+    from wimcg import storage as storage_mod
+    from wimcg.ml.serve import NoModelPublished, predict
+    from wimcg.pipeline.writer import write_catalog, write_dataset
+
+    store = storage_mod.from_env()
+    try:
+        rows = predict(store)
+    except NoModelPublished as exc:
+        log.warning("previsão ignorada: %s", exc)
+        return 0
+    except RuntimeError as exc:
+        _error(f"previsão: {exc}")
+        return 1
+    if rows.empty:
+        log.info("a última hora fechada já foi prevista")
+        return 0
+    now = datetime.now(UTC)
+    write_dataset(store, catalog.get("predictions"), rows, now=now)
+    write_catalog(store, list(catalog.DATASETS), now=now)
+    store.commit(f"previsões {rows['time'].iloc[0]:%Y-%m-%d %H:%M}Z")
+    for r in rows.itertuples():
+        log.info("+%d h: %s (alta %.0f%%), retorno %+.2f%%, volatilidade %.2f%%", r.horizon_hours, r.direction, 100 * r.prob_up, r.pred_return_pct, r.pred_volatility_pct)
+    return 0
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    from wimcg import storage as storage_mod
+    from wimcg.ml.serve import SUMMARY_KEY, summarize, verify
+    from wimcg.pipeline.writer import write_catalog, write_dataset
+
+    store = storage_mod.from_env()
+    now = datetime.now(UTC)
+    rows = verify(store, now=now, days=args.days)
+    if rows.empty:
+        log.info("nenhuma previsão com resultado conhecido ainda")
+        return 0
+    ds = catalog.get("verification")
+    write_dataset(store, ds, rows, now=now)
+    summary = summarize(load_dataset(store, ds.id), now)
+    store.write(SUMMARY_KEY, json.dumps(summary, ensure_ascii=False).encode())
+    write_catalog(store, list(catalog.DATASETS), now=now)
+    store.commit(f"verificação {now:%Y-%m-%d %H:%M}Z")
+    for g in summary["windows"]["7d"]:
+        log.info(
+            "+%d h (7 dias, n=%d): acerto %.1f%% | sempre alta %.1f%% | inverter %.1f%% | volatilidade: erro %.2f p.p. (persistência %.2f)",
+            g["horizon_hours"], g["n"], 100 * g["accuracy"], 100 * g["always_up_accuracy"], 100 * g["reversal_accuracy"],
+            g["volatility_mae_pct"], g["volatility_mae_persistence_pct"],
+        )
+    return 0
+
+
 def cmd_ml_data(args: argparse.Namespace) -> int:
     """Baixa do Hugging Face as tabelas de treino e monta a tabela por hora."""
     from wimcg.ml import data, run
@@ -408,6 +504,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("gkg-import", help="grava o Parquet de gkg-pack no dataset gkg-hourly")
     p.add_argument("file", nargs="?", default="history/gkg-hourly.parquet")
     p.set_defaults(func=cmd_gkg_import)
+
+    p = sub.add_parser("train", help="treina os modelos publicados (direção e volatilidade), com avaliação mês a mês")
+    p.add_argument("--publish", action="store_true", help="publica sempre")
+    p.add_argument("--publish-if-better", action="store_true", help="publica só se a avaliação não piorar em relação ao modelo atual")
+    p.add_argument("--evaluate-from", default="2019-01-01", help="primeiro mês da avaliação")
+    p.add_argument("--last", help="último mês da avaliação (padrão: o último mês completo)")
+    p.set_defaults(func=cmd_train)
+
+    p = sub.add_parser("predict", help="emite as previsões da última hora fechada")
+    p.set_defaults(func=cmd_predict)
+
+    p = sub.add_parser("verify", help="compara as previsões passadas com o que aconteceu")
+    p.add_argument("--days", type=int, default=35, help="quantos dias de previsões verificar")
+    p.set_defaults(func=cmd_verify)
 
     p = sub.add_parser("ml-data", help="baixa as tabelas de treino do Hugging Face e monta a tabela por hora")
     p.set_defaults(func=cmd_ml_data)

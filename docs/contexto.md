@@ -150,6 +150,17 @@ rede recorrente) com quatro conjuntos cumulativos de variáveis; redes com 3 sem
 - **Redes neurais:** não superam o gradient boosting. A rede de sequência, que lê as últimas 168
   horas, empata com a rede simples sobre as mesmas variáveis: ler a sequência não acrescentou nada.
 
+**Volatilidade (17/11/2026):** mesma avaliação, com `rv_next` = raiz da soma dos quadrados dos
+retornos horários das próximas *h* horas. Erro absoluto médio, em pontos percentuais:
+
+| Horizonte | Persistência | HAR | Gradient boosting | Ganho do gb sobre a persistência / o HAR |
+|---|---|---|---|---|
+| 1 h | 0,359 | 0,283 | 0,273 | 24,0% / 3,7% |
+| 4 h | 0,575 | 0,471 | 0,433 | 24,6% / 8,1% |
+| 24 h | 1,088 | 0,931 | 0,864 | 20,6% / 7,2% |
+
+Ainda sem intervalo de confiança; o relatório de cada treino mensal guarda os números por mês.
+
 **Leitura honesta:** não há sinal de direção aproveitável nestes dados e horizontes. O resultado
 confirma a expectativa registrada em "Sobre a IA" e é publicável assim. Antes de qualquer
 previsão ir ao site, ela precisa superar a regra de inverter, não só 50%.
@@ -278,14 +289,28 @@ Plano:
   em 63 notícias de teste, só 19 tratavam do assunto) e `json/big-moves/<ano>.json`.
 - **O que ainda falta para o site:** a tabela de previsões, que vem com o modelo.
 
+## Previsões publicadas (decidido em 17/11/2026)
+
+- **O que vai ao ar:** direção (gradient boosting só com preço) e volatilidade (gradient boosting
+  com preço e estado do mercado), em 1, 4 e 24 h. A direção é publicada mesmo sem superar as
+  regras simples, como verificação pública; a volatilidade supera a persistência e o HAR.
+- **Como no Future Space:** cada previsão é conferida com o que aconteceu e vai para uma tabela
+  (`verification`), com as referências ao lado (sempre alta, inverter, persistência).
+- **Treino mensal no Actions** (`train.yml`, dia 1 às 03:17 UTC): avalia mês a mês desde 2019 e
+  publica só se, nos meses em comum com o modelo atual, o acerto da direção não cair mais de
+  0,5 ponto e o erro da volatilidade não subir mais de 2%. Disparo pelo agendamento do GitHub e,
+  se o autor configurar, também pelo cron-job.org (mesmo token da coleta).
+- **Dependências:** o grupo `ml` (scikit-learn, com versões fixas iguais às do Future Space) vai
+  ao Actions; o PyTorch fica no grupo `nn`, só para a pesquisa local.
+
 ## Próximos passos
 
-1. **Decidir o rumo da fase 3** com o autor, à luz da primeira comparação: o que testar a seguir
-   (outras variáveis, como derivativos e dados da blockchain; volatilidade em vez de direção,
-   que é mais previsível; movimentos grandes à parte) e o que o site mostra nas previsões.
+1. Primeiro treino publicado (`train` com `force`) e conferir as primeiras previsões e verificações.
 2. Notícias dos grandes movimentos (`move-news`) também localmente, para a linha do tempo do site.
 3. Confirmar que o visualizador do Hugging Face voltou depois da reimportação do histórico de
    notícias (17/11/2026, todas as partições de `gkg-hourly` com as mesmas colunas).
 4. **Fase 4:** API (publicada) e site (ver "Site").
+5. Depois do site no ar: testar outras variáveis (financiamento dos contratos futuros, dados da
+   blockchain, juros e dólar), com a mesma avaliação e a regra de inverter como referência.
 
 Adiado de propósito: consertar a lacuna do histórico de notícias (ver "GDELT, arquivos brutos").

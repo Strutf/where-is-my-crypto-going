@@ -48,7 +48,9 @@ wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arq
 wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
 wimcg gkg-import                              # grava o histórico no armazenamento
 uvicorn wimcg.api.app:app --reload            # API local, lendo ./data
-pip install -e ".[ml]"                        # scikit-learn e PyTorch, só para a pesquisa do modelo
+wimcg train --publish-if-better               # treina, avalia mês a mês e publica se não piorar (workflow train)
+wimcg predict && wimcg verify                 # previsões da última hora e verificação (na coleta)
+pip install -e ".[ml,nn]"                     # pesquisa: scikit-learn e PyTorch (o nn não vai ao Actions)
 wimcg ml-data                                 # baixa as tabelas do Hugging Face e monta a tabela por hora
 wimcg ml-eval                                 # avaliação mês a mês de gb, mlp e gru (previsões em data/ml/)
 wimcg ml-report                               # resumo em research/results/direction_eval.{json,md}
@@ -73,7 +75,11 @@ ruff check src tests && pytest -q
     (testes em `tests/test_ml.py`);
   - `models.py`: gradient boosting, rede densa e rede recorrente, com a mesma interface;
   - `evaluate.py`: avaliação andando para a frente, medidas e intervalos de confiança;
-  - `run.py`: rodadas em paralelo e relatório.
+  - `run.py`: rodadas em paralelo e relatório;
+  - `volatility.py`: volatilidade realizada, referências (persistência, HAR) e gradient boosting;
+  - `train.py`: treino mensal publicado, avaliação mês a mês e trava de publicação;
+  - `serve.py`: previsão a cada coleta (tabela `predictions`, nunca reescrita), verificação
+    (`verification`) e resumo para o site.
 - `src/wimcg/outlets.py`: lista dos veículos grandes aceitos nas tabelas que guardam endereços de notícias.
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
   Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min e alimenta `gkg-hourly`
@@ -82,7 +88,9 @@ ruff check src tests && pytest -q
   Hugging Face, já que o token só existe lá.
 - `research/gkg_gaps.py`: estimativa das horas incompletas no histórico do BigQuery (~26%).
   A lacuna foi aceita por enquanto e está descrita no README e em `docs/contexto.md`.
-- `.github/workflows/ingest.yml`: coleta a cada 15 min (disparada pelo cron-job.org), mais
+- `.github/workflows/train.yml`: treino mensal (dia 1), com a trava de publicação.
+- `.github/workflows/ingest.yml`: coleta a cada 15 min (disparada pelo cron-job.org), previsão e
+  verificação, mais
   carga histórica por `workflow_dispatch` (`backfill`, `desde`, `ate`; `backfill: gkg-history`
   importa o Parquet).
 

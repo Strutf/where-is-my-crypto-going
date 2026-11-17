@@ -182,7 +182,26 @@ mercado; + Fear & Greed; + notícias. Números completos, com intervalos de conf
 
 **Conclusão:** não há sinal de direção aproveitável nestes dados e horizontes. É o resultado
 esperado para um mercado líquido e fica publicado assim. Para reproduzir:
-`pip install -e ".[ml]" && wimcg ml-data && wimcg ml-eval && wimcg ml-report`.
+`pip install -e ".[ml,nn]" && wimcg ml-data && wimcg ml-eval && wimcg ml-report`.
+
+### Previsões publicadas e verificação
+
+A partir da comparação, o projeto publica dois modelos de gradient boosting, para 1, 4 e 24 h:
+
+- **direção**, só com as variáveis de preço: mesmo sem superar as regras simples na avaliação
+  histórica, fica publicada para ser conferida ao vivo, com transparência;
+- **volatilidade** (o quanto o preço vai oscilar): na avaliação de 2019 a 2026, erra de 20% a 25%
+  menos que repetir a volatilidade recente e de 4% a 8% menos que o HAR, a referência clássica.
+
+Como no Future Space:
+
+- **treino mensal** (workflow `train`): avalia mês a mês desde 2019 e só substitui o modelo em
+  uso se a avaliação não piorar; os treinos recusados também ficam registrados;
+- **previsão** a cada hora, na coleta: a tabela `predictions` guarda cada previsão uma única vez,
+  com as referências simples calculadas no mesmo instante;
+- **verificação**: quando o horizonte passa, a tabela `verification` registra o que aconteceu, se
+  a direção acertou e o erro da volatilidade, ao lado das referências. O resumo dos últimos 7 e
+  30 dias fica em `/v1/verification/summary`.
 
 ### Avaliação (fase 3)
 
