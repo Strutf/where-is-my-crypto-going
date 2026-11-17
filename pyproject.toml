@@ -30,6 +30,8 @@ ml = [
 ]
 dev = [
     "where-is-my-crypto-going[pipeline,api]",
+    # Os testes do treino usam o scikit-learn; o PyTorch (pesado) não é necessário para eles.
+    "scikit-learn>=1.5",
     "pytest>=8",
     "ruff>=0.6",
 ]
