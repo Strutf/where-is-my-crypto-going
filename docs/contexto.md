@@ -147,6 +147,7 @@ Plano:
 ## Infraestrutura (estado em 16/11/2026)
 
 - **Repositório:** https://github.com/Strutf/where-is-my-crypto-going (público).
+- **API e site:** https://where-is-my-crypto-going.vercel.app (documentação em `/docs`).
 - **Dataset:** https://huggingface.co/datasets/Strutf/where-is-my-crypto-going (público, licença
   em branco de propósito: os dados têm termos de várias fontes).
 - **Configuração no GitHub:** secret `HF_TOKEN` (token fine-grained só deste dataset, chamado
@@ -175,12 +176,13 @@ Plano:
   (antes, durante, depois) é gravada assim que chega e marcada em `json/move-news/done.json`,
   então a busca continua de onde parou. A busca do GDELT recusa a maioria das consultas.
 - **Página do dataset:** o `README.md` do Hugging Face é gerado do catálogo a cada coleta.
-- **API (17/11/2026, ainda não publicada):** FastAPI no mesmo formato do Future Space, só de
+- **API (publicada em 17/11/2026 em https://where-is-my-crypto-going.vercel.app):** FastAPI no mesmo formato do Future Space, só de
   leitura, sem pandas. Rotas: `/v1/datasets`, `/v1/datasets/{id}/latest` e
   `/v1/datasets/{id}/data?start=&end=&fields=`. As tabelas só em Parquet (`btc-usd-1m`,
   `gkg-hourly`) não passam pela API. Com as velas locais: estado atual em 1 ms, 7 dias de velas
-  em 20 KB, 1 ano de fechamentos por hora em 428 KB. Falta o autor ligar o repositório à Vercel
-  (variável `FS_HF_REPO`); previsões e site entram depois.
+  em 20 KB, 1 ano de fechamentos por hora em 428 KB. Na Vercel (projeto ligado ao repositório,
+  variável `FS_HF_REPO`, deploy a cada envio para o `main`): primeira resposta em 2 a 4 s,
+  depois ~0,2 s, com cache da CDN e compressão funcionando. Previsões e site entram depois.
 
 ## Site (plano para a fase 4, definido em 17/11/2026)
 
