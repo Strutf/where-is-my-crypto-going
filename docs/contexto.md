@@ -104,21 +104,33 @@ acordos de paz.
 
 ## Resultados até agora
 
-Com 14 meses de velas (out/2025 a nov/2026), coletados localmente:
+### Conferência dos dados no Hugging Face (17/11/2026)
+
+Tabelas baixadas do dataset e conferidas depois da carga histórica:
+
+- **Velas (`btc-usd-1m`, `btc-usd-1h`):** de 20/07/2015 a hoje, 99.271 horas. Faltam 56 horas
+  (0,06%), a maior falha com 15 h (10/08/2018) e as outras com até 5 h. Nenhuma hora repetida,
+  nenhum preço zero ou máxima abaixo da mínima. A maior variação de 1 h é de março de 2020
+  (−19,9% em log).
+- **Grandes movimentos:** 1.961 de 1 h e 218 de 24 h no histórico inteiro, de 147 a 216 por ano
+  (de 1 h) e de 14 a 27 por ano (de 24 h). Os maiores de 24 h: 13/03/2020 (−45,4%, −20,2 desvios)
+  e 15/11/2018 (−15,6%, −18,6 desvios).
+- **Estado do mercado:** 17 viradas de regime desde 2018 pelo cruzamento das médias. A
+  convenção atrasa: a virada para "bear" de 2022 só veio em 15/01/2022, e a de volta para "bull"
+  em 09/09/2026 aconteceu com o preço já 30% abaixo do pico.
+- **Fear & Greed:** 3.208 dias desde 01/02/2018; faltam 4.
+- **Notícias por hora:** 101.829 horas, sem repetição, sem nenhuma hora faltando desde o fim do
+  histórico do BigQuery (15/11 23h); as 40 horas coletadas ao vivo têm os 8 arquivos.
+- **Notícias de bitcoin (`btc-news`):** 213 desde 15/11, de 56 veículos; 86 com cripto no título.
+- **Notícias dos grandes movimentos (`move-news`):** em ~13 h de coleta, só 15 das 5.511 fases
+  (3 por movimento desde 2017) passaram pelo limite da busca do GDELT. Nesse ritmo levaria meses.
+  Não afeta o treino; para a linha do tempo do site, rodar também localmente, com paciência.
+- **Coleta:** 51 execuções seguidas sem falha desde o fim da carga, cerca de 1 min cada.
+
+### Primeiros números locais (14 meses, out/2025 a nov/2026)
 
 - **Escala de 1 h:** 182 grandes movimentos (81 de alta, 101 de baixa).
 - **Escala de 24 h:** 17 grandes movimentos (4 de alta, 13 de baixa).
-
-Maiores movimentos de 24 h:
-
-| Início (UTC) | Variação | Desvios da volatilidade típica |
-|---|---|---|
-| 19/08/2026 11h | +11,7% | +8,3 |
-| 05/02/2026 00h | −14,0% | −6,2 |
-| 02/06/2026 04h | −7,2% | −4,5 |
-| 20/11/2025 10h | −10,6% | −4,5 |
-| 14/11/2026 02h | −8,3% | −4,4 |
-| 06/02/2026 00h | +12,3% | +4,4 |
 
 ## Sobre a IA
 
@@ -130,6 +142,11 @@ Expectativas registradas desde o início:
 - Um acerto de 52–55% numa avaliação honesta já seria um resultado real. Se ficar em 50%, isso
   também é resultado e deve ser publicado com transparência.
 - A **volatilidade** é bem mais previsível que a direção, e a referência para ela é o GARCH.
+
+- **Redes neurais (17/11/2026):** entram como comparação, depois da linha de base, nas mesmas
+  divisões de tempo e com as mesmas medidas. Em variáveis tabulares o gradient boosting costuma
+  empatar ou ganhar; o que uma rede acrescenta é ler a sequência de preços diretamente. A
+  expectativa é de pouco ou nenhum ganho, e um "não ganhou" medido também é resultado.
 
 Plano:
 
@@ -230,17 +247,12 @@ Plano:
 
 ## Próximos passos
 
-1. Conferir a carga das velas desde 2015 (cobertura, buracos da Coinbase) e os grandes
-   movimentos do histórico completo; registrar os números aqui.
-2. Conferir as primeiras coletas disparadas pelo cron-job.org (uma a cada 15 min, 1 a 2 min).
-3. Conferir a tabela `btc-news` (notícias de bitcoin com título e endereço, ligada em
-   17/11/2026; o histórico dela começa nessa data).
-4. Acompanhar as notícias dos grandes movimentos (`move-news`), que entram aos poucos, e
-   conferir a página do dataset no Hugging Face.
-5. Reimportar o histórico de notícias (`backfill: gkg-history`), para todas as partições de
-   `gkg-hourly` terem as mesmas colunas e o visualizador do Hugging Face abrir a tabela.
-6. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
-   completa. Depois, o ganho das notícias sobre a linha de base.
-7. **Fase 4:** API e site (ver "Site").
+1. **Fase 3, linha de base:** tabela de treino por hora e modelo de direção só com preço e Fear
+   & Greed, com avaliação completa. Depois, o ganho das notícias sobre a linha de base, e a
+   comparação com redes neurais nas mesmas divisões (ver "Sobre a IA").
+2. Notícias dos grandes movimentos (`move-news`) também localmente, para a linha do tempo do site.
+3. Confirmar que o visualizador do Hugging Face voltou depois da reimportação do histórico de
+   notícias (17/11/2026, todas as partições de `gkg-hourly` com as mesmas colunas).
+4. **Fase 4:** API (publicada) e site (ver "Site").
 
 Adiado de propósito: consertar a lacuna do histórico de notícias (ver "GDELT, arquivos brutos").
