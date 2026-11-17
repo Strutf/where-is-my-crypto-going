@@ -167,10 +167,10 @@ Plano:
   - o histórico inteiro só é refeito com `--full`, depois de uma carga de velas, ou sozinho
     quando a tabela ainda não existe. Nas velas locais (out/2025 a nov/2026), o cálculo
     recente dá o mesmo resultado que o completo.
-- **Rótulo de regime, ponto em aberto:** o cruzamento das médias demora a reagir. Em
-  16/11/2026 ele dizia "bull" com o preço 33,65% abaixo do pico do ano e abaixo das duas
-  médias. Antes de ir para o site, decidir se o rótulo continua assim ou passa a usar o preço
-  contra a média de 200 dias.
+- **Rótulo de regime (decidido em 17/11/2026):** fica a convenção usual, o cruzamento das
+  médias de 50 e 200 dias. Ela demora a reagir: em 16/11/2026 dizia "bull" com o preço 33,65%
+  abaixo do pico do ano e abaixo das duas médias. Por isso o site deve mostrar, ao lado do
+  rótulo, a queda desde o pico e o preço contra as médias, que já estão em `market-state`.
 - **Notícias dos grandes movimentos:** `wimcg news --limit 1 --quick` em cada coleta. Cada fase
   (antes, durante, depois) é gravada assim que chega e marcada em `json/move-news/done.json`,
   então a busca continua de onde parou. A busca do GDELT recusa a maioria das consultas.
