@@ -208,7 +208,11 @@ Plano:
   - gráfico no centro; ao passar o mouse ou clicar num período, mostrar os valores exatos;
   - ao lado do gráfico, um personagem conforme o regime: em baixa, um urso polar com neve
     caindo; em alta, um touro correndo de um lado para o outro, soltando fumaça pelo nariz.
-    Animações dos personagens ficam para depois.
+    Animações dos personagens ficam para depois;
+  - **imagens:** o site começa sem os personagens. O código deve deixar os três lugares prontos
+    (shiba no cabeçalho, urso e touro ao lado do gráfico), e o autor envia as imagens depois,
+    em PNG com fundo transparente. Desenho feito por código não serve: o autor não gosta do
+    resultado. Neve e fumaça podem ser feitas por código.
 - **Onde ficam os dados:** tudo no dataset do Hugging Face. A Vercel só hospeda o site e a API.
 - **O que o site lê:** `json/btc-usd-1h/<mês>.json` (gráfico), `json/market-state/latest.json`
   (volatilidade e regime agora), `json/btc-news/<dia>.json` (notícias; filtrar por `in_title`,
