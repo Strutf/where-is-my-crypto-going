@@ -161,16 +161,41 @@ Plano:
 - **Grandes movimentos:** no dia a dia o `wimcg moves` lê 46 dias de velas e recalcula os
   últimos 14; o histórico inteiro só é refeito com `--full`, depois de uma carga de velas.
 
+## Site (plano para a fase 4, definido em 17/11/2026)
+
+- **Idioma:** inglês como principal, com troca para português.
+- **Aviso em todas as páginas:** não é recomendação de investimento.
+- **Design:** o autor desenha e envia depois; aqui fica só o conteúdo.
+- **Páginas:**
+  1. **Início:** gráfico do Bitcoin agora, se está mais volátil que o normal ou calmo, se o
+     regime é de alta ou de baixa (bull/bear), grandes movimentos marcados. Não depende do modelo.
+  2. **Previsões:** direção em 1 h, 4 h e 24 h com probabilidade, e o acerto público: acerto da
+     direção contra 50% e erro do retorno previsto contra quem prevê "fica igual" (prever +0,5%
+     e dar −0,1% é um erro pequeno; prever +70% é um erro enorme). Cada previsão é gravada na
+     hora em que é feita, numa tabela que nunca é reescrita. Um indicador de mudança de regime
+     entra como experimental: há poucas viradas no histórico para validá-lo.
+  3. **Notícias:** as notícias recentes de bitcoin (`btc-news`) e a linha do tempo "o que moveu
+     o Bitcoin", com as notícias de antes, durante e depois de cada grande movimento.
+  4. **Sobre:** dados, fórmulas, modelo, avaliação e limitações.
+- **Onde ficam os dados:** tudo no dataset do Hugging Face. A Vercel só hospeda o site e a API.
+- **O que ainda falta para o site:** um resumo pequeno em JSON gerado a cada coleta (preço
+  recente, volatilidade, regime), porque o site não deve ler as velas de 1 minuto; a tabela de
+  previsões; e um filtro de relevância para `btc-news`, já que o tema `ECON_BITCOIN` do GDELT
+  também marca notícias que só citam bitcoin de passagem (em 2 horas de teste, 43 notícias,
+  várias fora do assunto).
+
 ## Próximos passos
 
 1. Conferir a carga das velas desde 2015 (cobertura, buracos da Coinbase) e os grandes
    movimentos do histórico completo; registrar os números aqui.
 2. Conferir as primeiras coletas disparadas pelo cron-job.org (uma a cada 15 min, 1 a 2 min).
-3. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
-4. Página do dataset no Hugging Face, com a descrição de cada tabela e a lacuna do histórico
+3. Conferir a tabela `btc-news` (notícias de bitcoin com título e endereço, ligada em
+   17/11/2026; o histórico dela começa nessa data).
+4. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
+5. Página do dataset no Hugging Face, com a descrição de cada tabela e a lacuna do histórico
    de notícias.
-5. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
+6. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
    completa. Depois, o ganho das notícias sobre a linha de base.
-6. **Fase 4:** API e site.
+7. **Fase 4:** API e site (ver "Site").
 
 Adiado de propósito: consertar a lacuna do histórico de notícias (ver "GDELT, arquivos brutos").

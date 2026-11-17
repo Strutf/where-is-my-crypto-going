@@ -20,4 +20,5 @@ CONNECTORS: dict[str, Connector] = {
     "btc-usd-1m": coinbase.btc_usd_1m,
     "fear-greed": feargreed.fear_greed,
     "gkg-hourly": gdelt_gkg.gkg_hourly,
+    "btc-news": gdelt_gkg.btc_news,
 }

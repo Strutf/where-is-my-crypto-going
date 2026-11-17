@@ -60,7 +60,8 @@ ruff check src tests && pytest -q
 - `src/wimcg/moves.py`: detecção dos grandes movimentos.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
-  Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min.
+  Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min e alimenta `gkg-hourly`
+  (contagens) e `btc-news` (notícias de bitcoin com título e endereço).
 - `history/gkg-hourly.parquet`: histórico exportado do BigQuery (~3 MB). O Actions o grava no
   Hugging Face, já que o token só existe lá.
 - `research/gkg_gaps.py`: estimativa das horas incompletas no histórico do BigQuery (~26%).

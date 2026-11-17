@@ -81,6 +81,7 @@ flowchart LR
 | `big-moves` | este projeto | grandes movimentos detectados nas velas | evento | jul/2015– |
 | `move-news` | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) | notícias em inglês sobre bitcoin e cripto em torno de cada movimento | evento | a depender da cobertura do GDELT |
 | `gkg-hourly` | [GDELT GKG](https://www.gdeltproject.org/data.html#rawdatafiles) | notícias por hora: total, tom médio, as de bitcoin e as de assuntos do mundo (juros, bolsas, regulação, ataques hackers, guerras, sanções) | 1 h | fev/2015– |
+| `btc-news` | [GDELT GKG](https://www.gdeltproject.org/data.html#rawdatafiles) | cada notícia marcada com o tema de bitcoin: título, endereço, veículo, idioma, tom e assuntos | 15 min | nov/2026– |
 
 Todas são gratuitas e não exigem cadastro.
 

@@ -231,6 +231,38 @@ DATASETS: tuple[Dataset, ...] = (
         "a contagens brutas. Os temas de EPU_UNCERTAINTY só se firmam em 2016; antes disso "
         "trate world_uncertainty_articles como ausente.",
     ),
+    Dataset(
+        id="btc-news",
+        title="Notícias de bitcoin, uma a uma (GDELT GKG)",
+        description="Cada notícia que o GDELT marcou com o tema de bitcoin (ECON_BITCOIN), em "
+        "qualquer idioma: título, endereço, veículo, tom e assuntos. Alimenta a página de notícias "
+        "do site. Começa em novembro de 2026, quando a coleta foi ligada.",
+        provider="GDELT Project (GKG 2.1, arquivos brutos)",
+        source_url="https://www.gdeltproject.org/data.html#rawdatafiles",
+        license="GDELT: uso livre com citação. Os títulos pertencem aos veículos originais.",
+        cadence="15min",
+        # Por dia, para o arquivo regravado a cada hora ser pequeno.
+        partition="day",
+        key=("time", "url"),
+        fields=(
+            _time("Arquivo de 15 min do GDELT em que a notícia apareceu (UTC)"),
+            Field("url", "str", None, "Endereço da notícia"),
+            Field("title", "str", None, "Título, no idioma original (vazio se o GDELT não o registrou)"),
+            Field("domain", "str", None, "Veículo"),
+            Field("language", "str", None, "Idioma original, no código do GDELT (eng = inglês)"),
+            Field("tone", "float", None, "Tom da notícia (V2Tone; negativo = tom negativo)"),
+            Field("topics", "str", None, "Assuntos de gkg-hourly presentes na notícia, separados por vírgula"),
+        ),
+        schedule="realtime",
+        # Só vale sem nenhum dado gravado: a primeira coleta busca os dois últimos dias.
+        update_hours=48,
+        append_only=True,
+        historical=True,
+        backfill_chunk_days=2,
+        critical=False,
+        notes="O tema do GDELT é largo: entram notícias que só citam bitcoin de passagem. Uma "
+        "hora só é gravada depois que o GDELT publica todos os arquivos dela.",
+    ),
 )
 
 BY_ID: dict[str, Dataset] = {d.id: d for d in DATASETS}

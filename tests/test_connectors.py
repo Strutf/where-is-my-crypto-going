@@ -39,12 +39,16 @@ def test_fear_greed_parses_and_filters_by_date():
     assert df[["value", "classification"]].values.tolist() == [["10", "Extreme Fear"]]
 
 
-def _gkg_zip(stamp: str, themes: list[str]) -> bytes:
+def _gkg_zip(stamp: str, themes: list[str], translated: bool = False) -> bytes:
     """Arquivo .gkg.csv.zip com uma linha por tema e um pedaço solto (quebra de linha no último campo)."""
     lines = []
     for i, theme in enumerate(themes):
         fields = [""] * gdelt_gkg.N_FIELDS
         fields[0], fields[gdelt_gkg.DATE], fields[gdelt_gkg.THEMES], fields[gdelt_gkg.TONE] = f"{stamp}-{i}", stamp, theme, "-2,1,3"
+        fields[gdelt_gkg.DOMAIN], fields[gdelt_gkg.URL] = "example.com", f"https://example.com/{stamp}/{i}"
+        fields[gdelt_gkg.EXTRAS] = "<PAGE_LINKS>x</PAGE_LINKS><PAGE_TITLE>Bitcoin falls &#x2013; again</PAGE_TITLE>"
+        if translated:
+            fields[gdelt_gkg.TRANSLATION] = "srclc:por;eng:GT-POR 1.0"
         lines.append("\t".join(fields))
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -65,7 +69,7 @@ def _gdelt(last_en: str, last_tr: str, missing: tuple[str, ...] = ()):
             return httpx.Response(200, text=f"1 abc http://data.gdeltproject.org/gdeltv2/{last_tr}.translation.gkg.csv.zip\n")
         if name in missing:
             return httpx.Response(404)
-        return httpx.Response(200, content=_gkg_zip(name[:14], ["ECON_BITCOIN;CYBER_ATTACK;", "TERROR;"]))
+        return httpx.Response(200, content=_gkg_zip(name[:14], ["ECON_BITCOIN;CYBER_ATTACK;", "TERROR;"], "translation" in name))
 
     return handler, requested
 
@@ -101,3 +105,27 @@ def test_gkg_hourly_stops_waiting_for_late_translations():
     assert soon.empty
     assert later["time"].tolist() == [pd.Timestamp("2026-02-05T10:00Z")]
     assert (later.iloc[0]["en_files"], later.iloc[0]["translated_files"]) == (4, 0)
+
+
+def test_btc_news_reuses_the_files_read_for_the_hourly_counts():
+    handler, requested = _gdelt("20260205114500", "20260205114500")
+    start, end = datetime(2026, 2, 5, 10, tzinfo=UTC), datetime(2026, 2, 5, 12, 7, tzinfo=UTC)
+    with make_client(transport=httpx.MockTransport(handler)) as client:
+        gdelt_gkg.gkg_hourly(client, start, end)
+        downloads = len(requested)
+        news = gdelt_gkg.btc_news(client, start, end)
+        assert len(requested) == downloads + 2  # só as duas listas; nenhum arquivo de novo
+    assert not gdelt_gkg._news_cache  # o que foi entregue sai da memória
+    assert len(news) == 2 * 8  # uma notícia de bitcoin por arquivo, 8 arquivos por hora, 2 horas
+    first = news.sort_values(["time", "language"]).iloc[0]
+    assert first["time"] == pd.Timestamp("2026-02-05T10:00Z")
+    assert (first["title"], first["domain"], first["language"]) == ("Bitcoin falls \u2013 again", "example.com", "eng")
+    assert (first["url"], first["tone"], first["topics"]) == ("https://example.com/20260205100000/0", -2.0, "cyber")
+    assert set(news["language"]) == {"eng", "por"}
+
+
+def test_btc_news_downloads_by_itself_when_the_hour_was_not_read():
+    handler, requested = _gdelt("20260205114500", "20260205114500")
+    with make_client(transport=httpx.MockTransport(handler)) as client:
+        news = gdelt_gkg.btc_news(client, datetime(2026, 2, 5, 10, tzinfo=UTC), datetime(2026, 2, 5, 11, 30, tzinfo=UTC))
+    assert len(requested) == 2 + 8 and len(news) == 8
