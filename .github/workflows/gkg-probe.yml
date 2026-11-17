@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -c requirements-pipeline.txt .
+      - run: pip install -c requirements-pipeline.txt ".[pipeline]"
       - name: Últimas horas (sem nada gravado)
         run: time wimcg update --datasets gkg-hourly
       - name: De novo (deve continuar da última hora, sem baixar nada outra vez)

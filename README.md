@@ -213,7 +213,7 @@ wimcg news --limit 20                            # notícias dos 20 maiores movi
 pytest -q
 ```
 
-Para a API local, lendo os mesmos dados: `pip install uvicorn && uvicorn wimcg.api.app:app`
+Para a API local, lendo os mesmos dados: `uvicorn wimcg.api.app:app`
 (documentação interativa em `/docs`).
 
 Os dados ficam em `./data`, em Parquet e JSON. As variáveis de ambiente são as mesmas do

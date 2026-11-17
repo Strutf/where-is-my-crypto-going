@@ -61,7 +61,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       # Instalação sem o token no ambiente: código de terceiros não consegue lê-lo.
-      - run: pip install -c requirements-pipeline.txt ".[hf]"
+      - run: pip install -c requirements-pipeline.txt ".[pipeline,hf]"
       - name: Coletar
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

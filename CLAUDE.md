@@ -47,7 +47,7 @@ wimcg gkg-sql --start 2015-02-19 --end 2021-01-01   # consulta do BigQuery (not√
 wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arquivos por hora
 wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
 wimcg gkg-import                              # grava o hist√≥rico no armazenamento
-uvicorn wimcg.api.app:app --reload            # API local, lendo ./data (pip install uvicorn)
+uvicorn wimcg.api.app:app --reload            # API local, lendo ./data
 ruff check src tests && pytest -q
 ```
 
