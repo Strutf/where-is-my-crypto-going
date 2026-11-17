@@ -47,6 +47,7 @@ wimcg gkg-sql --start 2015-02-19 --end 2021-01-01   # consulta do BigQuery (not�
 wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arquivos por hora
 wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
 wimcg gkg-import                              # grava o histórico no armazenamento
+uvicorn wimcg.api.app:app --reload            # API local, lendo ./data (pip install uvicorn)
 ruff check src tests && pytest -q
 ```
 
@@ -60,6 +61,8 @@ ruff check src tests && pytest -q
 - `src/wimcg/moves.py`: detecção dos grandes movimentos.
 - `src/wimcg/market.py`: velas de 1 hora e estado do mercado (volatilidade, regime, queda desde o pico).
 - `src/wimcg/card.py`: página do dataset no Hugging Face, gerada do catálogo.
+- `src/wimcg/api/app.py`: API de leitura (FastAPI, sem pandas). Na Vercel entra por `api/index.py`
+  e `vercel.json`, com as dependências de `requirements.txt`. O site vai morar no mesmo aplicativo.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
 - `src/wimcg/outlets.py`: lista dos veículos grandes aceitos nas tabelas que guardam endereços de notícias.
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).

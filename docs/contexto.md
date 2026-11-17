@@ -175,6 +175,12 @@ Plano:
   (antes, durante, depois) é gravada assim que chega e marcada em `json/move-news/done.json`,
   então a busca continua de onde parou. A busca do GDELT recusa a maioria das consultas.
 - **Página do dataset:** o `README.md` do Hugging Face é gerado do catálogo a cada coleta.
+- **API (17/11/2026, ainda não publicada):** FastAPI no mesmo formato do Future Space, só de
+  leitura, sem pandas. Rotas: `/v1/datasets`, `/v1/datasets/{id}/latest` e
+  `/v1/datasets/{id}/data?start=&end=&fields=`. As tabelas só em Parquet (`btc-usd-1m`,
+  `gkg-hourly`) não passam pela API. Com as velas locais: estado atual em 1 ms, 7 dias de velas
+  em 20 KB, 1 ano de fechamentos por hora em 428 KB. Falta o autor ligar o repositório à Vercel
+  (variável `FS_HF_REPO`); previsões e site entram depois.
 
 ## Site (plano para a fase 4, definido em 17/11/2026)
 

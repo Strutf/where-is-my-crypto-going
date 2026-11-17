@@ -15,7 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 hf = ["huggingface_hub>=0.25"]
 s3 = ["boto3>=1.34"]
-dev = ["pytest>=8", "ruff>=0.6"]
+# A API (na Vercel) usa só fastapi + httpx, sem pandas: ver requirements.txt.
+api = ["fastapi>=0.115"]
+dev = ["pytest>=8", "ruff>=0.6", "fastapi>=0.115"]
 
 [project.scripts]
 wimcg = "wimcg.cli:main"

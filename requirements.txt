@@ -1,0 +1,3 @@
+# Dependências apenas da API (usadas pela Vercel). Para a coleta, use: pip install -e ".[hf]"
+fastapi>=0.115
+httpx>=0.27
