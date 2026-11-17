@@ -18,8 +18,9 @@ incompleta. No armazenamento o 404 não é guardado, então ali ele quer dizer q
 Conferido em 16/11/2026: a agregação dos arquivos bate com `articles` do BigQuery nas horas em
 que o BigQuery tem os 8 arquivos (ver docs/contexto.md).
 
-Os mesmos arquivos alimentam dois datasets: `gkg-hourly` (contagens por hora) e `btc-news` (as
-notícias de bitcoin, uma a uma, com título e endereço). Para não baixar tudo duas vezes, as
+Os mesmos arquivos alimentam dois datasets: `gkg-hourly` (contagens por hora, de todas as
+fontes) e `btc-news` (as notícias de bitcoin dos veículos grandes, uma a uma, com título e
+endereço). Para não baixar tudo duas vezes, as
 notícias de bitcoin de cada hora lida ficam guardadas na memória até o outro conector pedi-las.
 """
 
@@ -35,7 +36,7 @@ from datetime import datetime, timedelta
 import httpx
 import pandas as pd
 
-from wimcg import gkg
+from wimcg import gkg, outlets
 from wimcg.news import title_mentions_crypto
 from wimcg.pipeline.http import get
 
@@ -85,7 +86,8 @@ def parse(content: bytes, translated: bool) -> tuple[pd.DataFrame, pd.DataFrame]
             continue
         rows.append((_text(fields[DATE]), _text(fields[THEMES]), _text(fields[TONE])))
         themes = set(fields[THEMES].split(b";"))
-        if _BITCOIN in themes:
+        # Só entram em btc-news os veículos grandes (ver wimcg.outlets): o site publica o endereço.
+        if _BITCOIN in themes and outlets.is_major(_text(fields[URL])):
             names = {t.decode() for t in themes}
             found = _TITLE.search(fields[EXTRAS])
             # O título vem no idioma original, com entidades HTML (&#x2013;).

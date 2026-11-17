@@ -61,6 +61,7 @@ ruff check src tests && pytest -q
 - `src/wimcg/market.py`: velas de 1 hora e estado do mercado (volatilidade, regime, queda desde o pico).
 - `src/wimcg/card.py`: página do dataset no Hugging Face, gerada do catálogo.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
+- `src/wimcg/outlets.py`: lista dos veículos grandes aceitos nas tabelas que guardam endereços de notícias.
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
   Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min e alimenta `gkg-hourly`
   (contagens) e `btc-news` (notícias de bitcoin com título e endereço).

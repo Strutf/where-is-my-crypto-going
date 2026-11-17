@@ -24,7 +24,7 @@ def test_news_for_move_labels_phases(monkeypatch):
         calls.append(start)
         seen = {"20260204190000": "20260205T050000Z", "20260205190000": "20260205T193000Z",
                 "20260205200000": "20260205T210000Z"}[start]
-        art = {"title": "Crypto crash accelerates", "url": f"https://x/{start}", "domain": "x.com",
+        art = {"title": "Crypto crash accelerates", "url": f"https://www.reuters.com/{start}", "domain": "reuters.com",
                "sourcecountry": "US", "seendate": seen}
         return httpx.Response(200, content=json.dumps({"articles": [art]}))
 
@@ -95,7 +95,7 @@ def test_news_command_resumes_phase_by_phase(tmp_path, monkeypatch):
         kind = answers.pop(0)
         if kind == "refuse":
             return httpx.Response(429, text="Please limit requests")
-        arts = [] if kind == "empty" else [{"title": "Bitcoin crash", "url": f"https://x/{request.url.params['startdatetime']}", "domain": "x.com", "sourcecountry": "US", "seendate": "20260205T193000Z"}]
+        arts = [] if kind == "empty" else [{"title": "Bitcoin crash", "url": f"https://www.reuters.com/{request.url.params['startdatetime']}", "domain": "reuters.com", "sourcecountry": "US", "seendate": "20260205T193000Z"}]
         return httpx.Response(200, content=json.dumps({"articles": arts}))
 
     monkeypatch.setattr(http_mod, "make_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
@@ -116,3 +116,25 @@ def test_news_command_resumes_phase_by_phase(tmp_path, monkeypatch):
     answers[:] = ["news", "news", "news"]
     assert main(["news", "--limit", "1", "--quick"]) == 0
     assert len(json.loads(store.read(NEWS_DONE_KEY))) == 6
+
+
+def test_only_major_outlets_are_accepted():
+    from wimcg import outlets
+
+    for url in ("https://www.reuters.com/markets/x", "http://finance.yahoo.com/news/y", "https://economictimes.indiatimes.com/z", "https://BBC.co.uk/news"):
+        assert outlets.is_major(url), url
+    # Sites fora da lista, domínios que só parecem com os da lista e endereços que não são http(s).
+    for url in ("https://some-small-blog.net/btc", "https://reuters.com.evil.example/x", "https://notreuters.com/x", "javascript:alert(1)", "ftp://reuters.com/x", "", None):
+        assert not outlets.is_major(url), url
+
+
+def test_news_for_phase_drops_outlets_outside_the_list(monkeypatch):
+    monkeypatch.setattr(news, "MIN_INTERVAL", 0)
+    arts = [
+        {"title": "Bitcoin falls", "url": "https://www.cnbc.com/a", "domain": "cnbc.com", "seendate": "20260205T193000Z"},
+        {"title": "Bitcoin falls!!!", "url": "https://tiny-site.example/b", "domain": "tiny-site.example", "seendate": "20260205T193000Z"},
+    ]
+    move = pd.Series({"time": pd.Timestamp("2026-02-05T20:00Z"), "start": pd.Timestamp("2026-02-05T19:00Z"), "scale_hours": 1})
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=json.dumps({"articles": arts})))) as client:
+        rows = news.news_for_phase(client, move, "during")
+    assert rows["domain"].tolist() == ["cnbc.com"]

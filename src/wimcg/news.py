@@ -18,6 +18,8 @@ import time
 import httpx
 import pandas as pd
 
+from wimcg import outlets
+
 log = logging.getLogger(__name__)
 
 URL = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -124,6 +126,9 @@ def news_for_phase(client: httpx.Client, move: pd.Series, phase: str, patient: b
     lo, hi = {"before": (start - WINDOW, start), "during": (start, end), "after": (end, end + WINDOW)}[phase]
     rows = []
     for a in search(client, lo, hi, patient=patient):
+        # Só veículos grandes (ver wimcg.outlets): o site publica o endereço da notícia.
+        if not outlets.is_major(a.get("url")):
+            continue
         seen = pd.to_datetime(a["seendate"], format="%Y%m%dT%H%M%SZ", utc=True)
         rows.append(
             {

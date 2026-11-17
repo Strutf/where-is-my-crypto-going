@@ -192,6 +192,21 @@ Plano:
   3. **Notícias:** as notícias recentes de bitcoin (`btc-news`) e a linha do tempo "o que moveu
      o Bitcoin", com as notícias de antes, durante e depois de cada grande movimento.
   4. **Sobre:** dados, fórmulas, modelo, avaliação e limitações.
+- **Só veículos grandes (decidido em 17/11/2026):** as tabelas que guardam endereços de
+  notícias (`btc-news` e `move-news`) só aceitam veículos de uma lista feita à mão
+  (`src/wimcg/outlets.py`, cerca de 160 domínios: agências, grandes jornais e emissoras, imprensa
+  financeira e os principais veículos de cripto), para o site não mandar o leitor a um site
+  desconhecido ou malicioso. Numa amostra de 14 horas, a lista manteve 61 de 323 notícias (19%)
+  e 25 das 135 com cripto no título. As contagens de `gkg-hourly` continuam com todas as
+  fontes, porque ali não há endereço. No site, os links devem abrir com
+  `rel="noopener noreferrer nofollow"`.
+- **Esboço do autor (17/11/2026):**
+  - cabeçalho com o nome do site e um shiba inu segurando uma moeda de bitcoin; as abas à
+    direita: Início, Previsões, Sobre o modelo, Notícias;
+  - gráfico no centro; ao passar o mouse ou clicar num período, mostrar os valores exatos;
+  - ao lado do gráfico, um personagem conforme o regime: em baixa, um urso polar com neve
+    caindo; em alta, um touro correndo de um lado para o outro, soltando fumaça pelo nariz.
+    Animações dos personagens ficam para depois.
 - **Onde ficam os dados:** tudo no dataset do Hugging Face. A Vercel só hospeda o site e a API.
 - **O que o site lê:** `json/btc-usd-1h/<mês>.json` (gráfico), `json/market-state/latest.json`
   (volatilidade e regime agora), `json/btc-news/<dia>.json` (notícias; filtrar por `in_title`,

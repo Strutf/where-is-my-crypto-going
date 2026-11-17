@@ -225,9 +225,9 @@ DATASETS: tuple[Dataset, ...] = (
     Dataset(
         id="move-news",
         title="Notícias em torno dos grandes movimentos (GDELT)",
-        description="Notícias em inglês sobre bitcoin e cripto encontradas pelo GDELT nas 24 h "
-        "antes, durante e nas 24 h depois de cada grande movimento, com a fase em relação ao "
-        "movimento e categorias de causa por palavras-chave.",
+        description="Notícias em inglês sobre bitcoin e cripto, só de veículos grandes, "
+        "encontradas pelo GDELT nas 24 h antes, durante e nas 24 h depois de cada grande "
+        "movimento, com a fase em relação ao movimento e categorias de causa por palavras-chave.",
         provider="GDELT Project (DOC 2.0 API)",
         source_url="https://api.gdeltproject.org/api/v2/doc/doc",
         license="GDELT: uso livre com citação. Os títulos pertencem aos veículos originais.",
@@ -247,7 +247,8 @@ DATASETS: tuple[Dataset, ...] = (
             Field("categories", "str", None, "Categorias de causa por palavras-chave, separadas por vírgula"),
         ),
         schedule="derived",
-        notes="O horário é quando o GDELT viu a notícia, que pode vir minutos depois da publicação.",
+        notes="O horário é quando o GDELT viu a notícia, que pode vir minutos depois da publicação. "
+        "Só entram veículos grandes e conhecidos (lista em src/wimcg/outlets.py).",
     ),
     Dataset(
         id="gkg-hourly",
@@ -286,9 +287,10 @@ DATASETS: tuple[Dataset, ...] = (
     Dataset(
         id="btc-news",
         title="Notícias de bitcoin, uma a uma (GDELT GKG)",
-        description="Cada notícia que o GDELT marcou com o tema de bitcoin (ECON_BITCOIN), em "
-        "qualquer idioma: título, endereço, veículo, tom e assuntos. Alimenta a página de notícias "
-        "do site. Começa em novembro de 2026, quando a coleta foi ligada.",
+        description="Notícias que o GDELT marcou com o tema de bitcoin (ECON_BITCOIN), só de "
+        "veículos grandes e em qualquer idioma: título, endereço, veículo, tom e assuntos. "
+        "Alimenta a página de notícias do site. Começa em novembro de 2026, quando a coleta foi "
+        "ligada.",
         provider="GDELT Project (GKG 2.1, arquivos brutos)",
         source_url="https://www.gdeltproject.org/data.html#rawdatafiles",
         license="GDELT: uso livre com citação. Os títulos pertencem aos veículos originais.",
@@ -313,7 +315,10 @@ DATASETS: tuple[Dataset, ...] = (
         historical=True,
         backfill_chunk_days=2,
         critical=False,
-        notes="O tema do GDELT é largo: entram notícias que só citam bitcoin no meio do texto. "
+        notes="Só entram veículos grandes e conhecidos (lista em src/wimcg/outlets.py, cerca de "
+        "160 domínios), para o site não mandar o leitor a sites desconhecidos; ficam cerca de 20% "
+        "das notícias que o GDELT vê. O tema do GDELT é largo: entram notícias que só citam "
+        "bitcoin no meio do texto. "
         "Para ficar só com as que tratam do assunto, filtre por in_title. Uma hora só é gravada "
         "depois que o GDELT publica todos os arquivos dela.",
     ),

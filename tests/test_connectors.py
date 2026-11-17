@@ -45,7 +45,7 @@ def _gkg_zip(stamp: str, themes: list[str], translated: bool = False) -> bytes:
     for i, theme in enumerate(themes):
         fields = [""] * gdelt_gkg.N_FIELDS
         fields[0], fields[gdelt_gkg.DATE], fields[gdelt_gkg.THEMES], fields[gdelt_gkg.TONE] = f"{stamp}-{i}", stamp, theme, "-2,1,3"
-        fields[gdelt_gkg.DOMAIN], fields[gdelt_gkg.URL] = "example.com", f"https://example.com/{stamp}/{i}"
+        fields[gdelt_gkg.DOMAIN], fields[gdelt_gkg.URL] = "reuters.com", f"https://www.reuters.com/{stamp}/{i}"
         fields[gdelt_gkg.EXTRAS] = "<PAGE_LINKS>x</PAGE_LINKS><PAGE_TITLE>Bitcoin falls &#x2013; again</PAGE_TITLE>"
         if translated:
             fields[gdelt_gkg.TRANSLATION] = "srclc:por;eng:GT-POR 1.0"
@@ -119,9 +119,9 @@ def test_btc_news_reuses_the_files_read_for_the_hourly_counts():
     assert len(news) == 2 * 8  # uma notícia de bitcoin por arquivo, 8 arquivos por hora, 2 horas
     first = news.sort_values(["time", "language"]).iloc[0]
     assert first["time"] == pd.Timestamp("2026-02-05T10:00Z")
-    assert (first["title"], first["domain"], first["language"]) == ("Bitcoin falls \u2013 again", "example.com", "eng")
+    assert (first["title"], first["domain"], first["language"]) == ("Bitcoin falls \u2013 again", "reuters.com", "eng")
     assert first["in_title"]
-    assert (first["url"], first["tone"], first["topics"]) == ("https://example.com/20260205100000/0", -2.0, "cyber")
+    assert (first["url"], first["tone"], first["topics"]) == ("https://www.reuters.com/20260205100000/0", -2.0, "cyber")
     assert set(news["language"]) == {"eng", "por"}
 
 
@@ -130,3 +130,16 @@ def test_btc_news_downloads_by_itself_when_the_hour_was_not_read():
     with make_client(transport=httpx.MockTransport(handler)) as client:
         news = gdelt_gkg.btc_news(client, datetime(2026, 2, 5, 10, tzinfo=UTC), datetime(2026, 2, 5, 11, 30, tzinfo=UTC))
     assert len(requested) == 2 + 8 and len(news) == 8
+
+
+def test_btc_news_keeps_only_major_outlets_but_counts_stay_complete():
+    fields = [""] * gdelt_gkg.N_FIELDS
+    fields[gdelt_gkg.DATE], fields[gdelt_gkg.THEMES], fields[gdelt_gkg.TONE] = "20260205100000", "ECON_BITCOIN;", "1"
+    big, small = list(fields), list(fields)
+    big[gdelt_gkg.URL], small[gdelt_gkg.URL] = "https://www.cnbc.com/a", "https://tiny-site.example/b"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("x.gkg.csv", "\t".join(big) + "\n" + "\t".join(small) + "\n")
+    records, news = gdelt_gkg.parse(buf.getvalue(), translated=False)
+    assert len(records) == 2  # as contagens por hora continuam com todas as fontes
+    assert news["url"].tolist() == ["https://www.cnbc.com/a"]
