@@ -44,3 +44,23 @@ def test_update_start_of_append_only_data_continues_after_the_last_row(tmp_path)
     last = END - timedelta(minutes=30)
     store.write(manifest_key(news.id), json.dumps({"end": format_time(last)}).encode())
     assert update_start(store, news, END) == last + timedelta(seconds=1)
+
+
+def test_dataset_card_lists_every_table_and_does_not_change_between_runs(tmp_path):
+    from wimcg.pipeline.writer import write_catalog
+
+    store = LocalStorage(tmp_path)
+    store.write(manifest_key("btc-usd-1m"), json.dumps({"start": "2015-07-20T00:00:00Z", "end": format_time(END)}).encode())
+    write_catalog(store, list(catalog.DATASETS), now=END)
+    text = store.read("README.md").decode()
+    assert text.startswith("---\n") and "Não é recomendação de investimento" in text
+    for ds in catalog.DATASETS:
+        assert f"### `{ds.id}`" in text
+    # O visualizador só recebe as tabelas que já têm dados.
+    assert 'data_files: "parquet/btc-usd-1m/*.parquet"' in text and "parquet/move-news/" not in text.split("---")[1]
+    assert "**Desde:** 2015-07-20" in text and "**Desde:** ainda sem dados" in text
+
+    # Uma coleta mais tarde muda a cobertura, mas não a página (ela não cita o fim dos dados).
+    store.write(manifest_key("btc-usd-1m"), json.dumps({"start": "2015-07-20T00:00:00Z", "end": format_time(END + timedelta(hours=1))}).encode())
+    write_catalog(store, list(catalog.DATASETS), now=END + timedelta(hours=1))
+    assert store.read("README.md").decode() == text

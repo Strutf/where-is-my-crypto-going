@@ -147,6 +147,58 @@ DATASETS: tuple[Dataset, ...] = (
         critical=False,
     ),
     Dataset(
+        id="btc-usd-1h",
+        title="Bitcoin em dólar, velas de 1 hora",
+        description="As velas de 1 minuto da Coinbase agrupadas por hora: abertura, máxima, "
+        "mínima, fechamento e volume. É o que o gráfico do site lê. Só entram horas fechadas.",
+        provider="Where Is My Crypto Going? (a partir de btc-usd-1m)",
+        source_url="https://github.com/Strutf/where-is-my-crypto-going",
+        license="Dados de mercado públicos da Coinbase; cite a fonte.",
+        cadence="1h",
+        partition="month",
+        key=("time",),
+        fields=(
+            _time("Início da hora (UTC)"),
+            Field("open", "float", "USD", "Preço de abertura"),
+            Field("high", "float", "USD", "Preço máximo"),
+            Field("low", "float", "USD", "Preço mínimo"),
+            Field("close", "float", "USD", "Preço de fechamento"),
+            Field("volume", "float", "BTC", "Volume negociado"),
+        ),
+        schedule="derived",
+        notes="Horas sem nenhuma negociação não têm vela.",
+    ),
+    Dataset(
+        id="market-state",
+        title="Estado do mercado: volatilidade e regime",
+        description="Para cada hora, medidas que descrevem o momento do Bitcoin usando só o "
+        "passado: se o mercado está mais agitado ou mais calmo que o normal, se o regime é de "
+        "alta ou de baixa e a distância até o pico do último ano. Descreve, não prevê.",
+        provider="Where Is My Crypto Going? (a partir de btc-usd-1h)",
+        source_url="https://github.com/Strutf/where-is-my-crypto-going",
+        license="MIT",
+        cadence="1h",
+        partition="month",
+        key=("time",),
+        fields=(
+            _time("Início da hora (UTC); o estado vale para o fim dela"),
+            Field("close", "float", "USD", "Preço de fechamento da hora"),
+            Field("volatility_24h", "float", "%", "Desvio-padrão dos últimos 24 retornos horários, vezes raiz de 24"),
+            Field("volatility_percentile", "float", None, "Posição da volatilidade entre os 365 dias anteriores (0 a 100)"),
+            Field("volatility_state", "str", None, "calm (percentil < 25), normal, volatile (> 75) ou extreme (> 95)"),
+            Field("ma_50d", "float", "USD", "Média dos fechamentos horários dos últimos 50 dias"),
+            Field("ma_200d", "float", "USD", "Média dos fechamentos horários dos últimos 200 dias"),
+            Field("regime", "str", None, "bull se a média de 50 dias está acima da de 200 dias; bear se está abaixo"),
+            Field("high_365d", "float", "USD", "Preço máximo dos últimos 365 dias"),
+            Field("drawdown_pct", "float", "%", "Distância do fechamento até esse máximo (0 = no pico)"),
+        ),
+        schedule="derived",
+        notes="O regime é uma convenção (cruzamento das médias de 50 e 200 dias) e só confirma "
+        "uma virada semanas depois de ela acontecer. Campos vazios = histórico ainda insuficiente "
+        "(30 dias para o pico, 90 para o percentil, 180 para a média longa). Não é recomendação "
+        "de investimento.",
+    ),
+    Dataset(
         id="big-moves",
         title="Grandes movimentos do Bitcoin",
         description="Variações acima de 3 vezes a volatilidade típica dos 30 dias anteriores, "

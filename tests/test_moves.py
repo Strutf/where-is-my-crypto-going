@@ -3,10 +3,10 @@ import json
 import numpy as np
 import pandas as pd
 
-from wimcg import catalog
+from wimcg import catalog, market
 from wimcg.cli import load_dataset, main
 from wimcg.moves import HISTORY_DAYS, detect, hourly_close
-from wimcg.partitions import manifest_key
+from wimcg.partitions import latest_key, manifest_key
 from wimcg.pipeline.writer import write_dataset
 from wimcg.storage import LocalStorage
 
@@ -101,3 +101,56 @@ def test_recent_run_only_reads_recent_candles(tmp_path, monkeypatch):
     assert list(recent.columns) == ["time", "close"]
     assert recent["time"].min() >= last.floor("D") - pd.Timedelta(days=HISTORY_DAYS)
     assert len(recent) < 24 * (HISTORY_DAYS + 1)
+
+
+def test_hourly_candles_aggregate_closed_hours_only():
+    t = pd.date_range("2025-01-01T00:00Z", periods=135, freq="min")  # até 02:14
+    price = np.arange(135.0) + 100
+    candles = pd.DataFrame({"time": t, "open": price, "high": price + 1, "low": price - 1, "close": price + 0.5, "volume": 2.0})
+    hourly = market.hourly_candles(candles)
+    assert hourly["time"].tolist() == [pd.Timestamp("2025-01-01T00:00Z"), pd.Timestamp("2025-01-01T01:00Z")]
+    first = hourly.iloc[0]
+    assert (first["open"], first["high"], first["low"], first["close"], first["volume"]) == (100, 160, 99, 159.5, 120)
+
+
+def _hourly(close: pd.Series) -> pd.DataFrame:
+    return pd.DataFrame({"time": close.index, "open": close.to_numpy(), "high": close.to_numpy(), "low": close.to_numpy(), "close": close.to_numpy(), "volume": 1.0})
+
+
+def test_state_flags_an_agitated_day_and_the_regime():
+    rng = np.random.default_rng(7)
+    hours = 24 * 400
+    idx = pd.date_range("2024-01-01", periods=hours, freq="h", tz="UTC")
+    shocks = rng.normal(0.0004, 0.003, hours)  # tendência de alta, mercado calmo
+    shocks[-24:] = rng.normal(0, 0.03, 24)  # último dia: dez vezes mais agitado
+    st = market.state(_hourly(pd.Series(100 * np.exp(np.cumsum(shocks)), index=idx))).set_index("time")
+    last, before = st.iloc[-1], st.iloc[-30]
+    assert last["volatility_state"] == "extreme" and last["volatility_percentile"] > 99
+    assert before["volatility_state"] in ("calm", "normal", "volatile")
+    assert before["regime"] == "bull" and before["ma_50d"] > before["ma_200d"]
+    assert before["drawdown_pct"] <= 0 and before["high_365d"] >= before["close"]
+    # Sem histórico suficiente, os campos ficam vazios em vez de inventar um valor.
+    assert pd.isna(st.iloc[24 * 30]["volatility_percentile"]) and pd.isna(st.iloc[24 * 100]["regime"])
+
+
+def test_state_calls_a_long_fall_a_bear_market():
+    idx = pd.date_range("2024-01-01", periods=24 * 300, freq="h", tz="UTC")
+    st = market.state(_hourly(pd.Series(100 * np.exp(np.linspace(0, -1, len(idx))), index=idx)))
+    assert st.iloc[-1]["regime"] == "bear" and st.iloc[-1]["drawdown_pct"] < -50
+
+
+def test_derive_recent_run_matches_full_run(tmp_path, monkeypatch):
+    close = _prices(seed=5, hours=24 * 420)
+    store = _store_with_candles(tmp_path, monkeypatch, close)
+    assert main(["derive", "--full"]) == 0
+    hourly_full, state_full = load_dataset(store, "btc-usd-1h"), load_dataset(store, "market-state")
+    assert len(hourly_full) == len(close) and state_full["regime"].notna().sum() > 24 * 200
+
+    assert main(["derive"]) == 0  # recalcula só os últimos dias, lendo um ano de velas de 1 hora
+    hourly, state = load_dataset(store, "btc-usd-1h"), load_dataset(store, "market-state")
+    pd.testing.assert_frame_equal(hourly, hourly_full)
+    assert state["time"].equals(state_full["time"])
+    numeric = [c for c in market.STATE_COLUMNS if c not in ("time", "volatility_state", "regime")]
+    assert np.allclose(state[numeric].astype(float), state_full[numeric].astype(float), atol=0.011, equal_nan=True)
+    assert state["regime"].fillna("").equals(state_full["regime"].fillna(""))
+    assert json.loads(store.read(latest_key("market-state")))["data"][0]["regime"] in ("bull", "bear")

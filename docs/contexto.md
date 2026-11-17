@@ -158,8 +158,23 @@ Plano:
 - **Cargas históricas no Actions:** Fear & Greed desde 2018 (feita), notícias por hora desde
   2015 (feita, `backfill: gkg-history`) e velas desde 2015 (iniciada em 16/11/2026, ~52 s por
   bloco de 30 dias).
-- **Grandes movimentos:** no dia a dia o `wimcg moves` lê 46 dias de velas e recalcula os
-  últimos 14; o histórico inteiro só é refeito com `--full`, depois de uma carga de velas.
+- **Derivados (`wimcg derive`, a cada coleta):**
+  - **velas de 1 hora** (`btc-usd-1h`): as últimas 48 h são reagrupadas a cada coleta;
+  - **grandes movimentos:** lê 46 dias de velas e recalcula os últimos 14;
+  - **estado do mercado** (`market-state`): volatilidade de 24 h e sua posição no último ano
+    (calm, normal, volatile, extreme), regime (bull se a média de 50 dias está acima da de 200
+    dias) e queda desde o pico de 365 dias. Lê um ano de velas de 1 hora;
+  - o histórico inteiro só é refeito com `--full`, depois de uma carga de velas, ou sozinho
+    quando a tabela ainda não existe. Nas velas locais (out/2025 a nov/2026), o cálculo
+    recente dá o mesmo resultado que o completo.
+- **Rótulo de regime, ponto em aberto:** o cruzamento das médias demora a reagir. Em
+  16/11/2026 ele dizia "bull" com o preço 33,65% abaixo do pico do ano e abaixo das duas
+  médias. Antes de ir para o site, decidir se o rótulo continua assim ou passa a usar o preço
+  contra a média de 200 dias.
+- **Notícias dos grandes movimentos:** `wimcg news --limit 1 --quick` em cada coleta. Cada fase
+  (antes, durante, depois) é gravada assim que chega e marcada em `json/move-news/done.json`,
+  então a busca continua de onde parou. A busca do GDELT recusa a maioria das consultas.
+- **Página do dataset:** o `README.md` do Hugging Face é gerado do catálogo a cada coleta.
 
 ## Site (plano para a fase 4, definido em 17/11/2026)
 
@@ -178,11 +193,11 @@ Plano:
      o Bitcoin", com as notícias de antes, durante e depois de cada grande movimento.
   4. **Sobre:** dados, fórmulas, modelo, avaliação e limitações.
 - **Onde ficam os dados:** tudo no dataset do Hugging Face. A Vercel só hospeda o site e a API.
-- **O que ainda falta para o site:** um resumo pequeno em JSON gerado a cada coleta (preço
-  recente, volatilidade, regime), porque o site não deve ler as velas de 1 minuto; a tabela de
-  previsões; e um filtro de relevância para `btc-news`, já que o tema `ECON_BITCOIN` do GDELT
-  também marca notícias que só citam bitcoin de passagem (em 2 horas de teste, 43 notícias,
-  várias fora do assunto).
+- **O que o site lê:** `json/btc-usd-1h/<mês>.json` (gráfico), `json/market-state/latest.json`
+  (volatilidade e regime agora), `json/btc-news/<dia>.json` (notícias; filtrar por `in_title`,
+  porque o tema `ECON_BITCOIN` do GDELT também marca notícias que só citam bitcoin de passagem:
+  em 63 notícias de teste, só 19 tratavam do assunto) e `json/big-moves/<ano>.json`.
+- **O que ainda falta para o site:** a tabela de previsões, que vem com o modelo.
 
 ## Próximos passos
 
@@ -191,9 +206,10 @@ Plano:
 2. Conferir as primeiras coletas disparadas pelo cron-job.org (uma a cada 15 min, 1 a 2 min).
 3. Conferir a tabela `btc-news` (notícias de bitcoin com título e endereço, ligada em
    17/11/2026; o histórico dela começa nessa data).
-4. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
-5. Página do dataset no Hugging Face, com a descrição de cada tabela e a lacuna do histórico
-   de notícias.
+4. Acompanhar as notícias dos grandes movimentos (`move-news`), que entram aos poucos, e
+   conferir a página do dataset no Hugging Face.
+5. Reimportar o histórico de notícias (`backfill: gkg-history`), para todas as partições de
+   `gkg-hourly` terem as mesmas colunas e o visualizador do Hugging Face abrir a tabela.
 6. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
    completa. Depois, o ganho das notícias sobre a linha de base.
 7. **Fase 4:** API e site (ver "Site").

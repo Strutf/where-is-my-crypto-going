@@ -78,6 +78,8 @@ flowchart LR
 |---|---|---|---|---|
 | `btc-usd-1m` | [Coinbase Exchange](https://docs.cdp.coinbase.com/exchange/reference/exchangerestapi_getproductcandles) | abertura, máxima, mínima, fechamento e volume do BTC-USD | 1 min | jul/2015– |
 | `fear-greed` | [alternative.me](https://alternative.me/crypto/fear-and-greed-index/) | índice de sentimento, de 0 (medo extremo) a 100 (ganância extrema) | 1 dia | fev/2018– |
+| `btc-usd-1h` | este projeto | as velas de 1 minuto agrupadas por hora (o que o gráfico do site lê) | 1 h | jul/2015– |
+| `market-state` | este projeto | estado do mercado a cada hora: volatilidade contra o último ano, regime de alta ou baixa, queda desde o pico | 1 h | jul/2015– |
 | `big-moves` | este projeto | grandes movimentos detectados nas velas | evento | jul/2015– |
 | `move-news` | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) | notícias em inglês sobre bitcoin e cripto em torno de cada movimento | evento | a depender da cobertura do GDELT |
 | `gkg-hourly` | [GDELT GKG](https://www.gdeltproject.org/data.html#rawdatafiles) | notícias por hora: total, tom médio, as de bitcoin e as de assuntos do mundo (juros, bolsas, regulação, ataques hackers, guerras, sanções) | 1 h | fev/2015– |
@@ -206,7 +208,7 @@ pip install -e ".[dev,hf]"
 wimcg backfill btc-usd-1m --start 2015-07-20     # histórico de 1 min (demorado: ~20 mil requisições)
 wimcg backfill fear-greed --start 2018-02-01
 wimcg update                                     # dados recentes
-wimcg moves                                      # detecta os grandes movimentos
+wimcg derive                                     # velas de 1 h, grandes movimentos e estado do mercado
 wimcg news --limit 20                            # notícias dos 20 maiores movimentos pendentes
 pytest -q
 ```

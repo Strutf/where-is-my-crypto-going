@@ -41,8 +41,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,hf]"
 wimcg update                                  # dados recentes
 wimcg backfill btc-usd-1m --start 2015-07-20  # histórico (blocos de 30 dias)
-wimcg moves                                   # grandes movimentos recentes (--full: histórico inteiro)
-wimcg news --limit 20                         # notícias dos maiores movimentos (GDELT)
+wimcg derive                                  # velas de 1 h, grandes movimentos e estado do mercado (--full: histórico inteiro)
+wimcg news --limit 20                         # notícias dos maiores movimentos (GDELT); --quick para na 1ª recusa
 wimcg gkg-sql --start 2015-02-19 --end 2021-01-01   # consulta do BigQuery (notícias por hora)
 wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arquivos por hora
 wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
@@ -58,6 +58,8 @@ ruff check src tests && pytest -q
   - `writer.py`: gravação idempotente em Parquet/JSON;
   - `http.py`: cliente HTTP com novas tentativas.
 - `src/wimcg/moves.py`: detecção dos grandes movimentos.
+- `src/wimcg/market.py`: velas de 1 hora e estado do mercado (volatilidade, regime, queda desde o pico).
+- `src/wimcg/card.py`: página do dataset no Hugging Face, gerada do catálogo.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
   Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min e alimenta `gkg-hourly`

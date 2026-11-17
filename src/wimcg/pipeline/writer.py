@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
+from wimcg import card
 from wimcg.catalog import Dataset
 from wimcg.partitions import (
     CATALOG_KEY,
@@ -171,3 +172,7 @@ def write_catalog(storage: Storage, datasets: list[Dataset], now: datetime | Non
         entries.append(entry)
     payload = {"updated_at": format_time(now or datetime.now(UTC)), "datasets": entries}
     storage.write(CATALOG_KEY, _json_bytes(payload))
+    # A página do dataset acompanha o catálogo; só é regravada quando o texto muda.
+    text = card.render(datasets, {e["id"]: e["coverage"]["start"] for e in entries}).encode()
+    if storage.read(card.KEY) != text:
+        storage.write(card.KEY, text)

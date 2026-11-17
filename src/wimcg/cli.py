@@ -1,4 +1,4 @@
-"""Linha de comando: `wimcg update | backfill | moves | news | gkg-sql | gkg-pack | gkg-import | datasets`."""
+"""Linha de comando: `wimcg update | backfill | derive | moves | news | gkg-sql | gkg-pack | gkg-import | datasets`."""
 
 from __future__ import annotations
 
@@ -138,69 +138,148 @@ def cmd_backfill(args: argparse.Namespace) -> int:
     return status
 
 
-def cmd_moves(args: argparse.Namespace) -> int:
-    """Recalcula os grandes movimentos: os recentes no dia a dia, todos com --full."""
+def _last_time(store, dataset_id: str) -> datetime | None:
+    raw = store.read(manifest_key(dataset_id))
+    last = json.loads(raw).get("end") if raw else None
+    return parse_time(last) if last else None
+
+
+def _derive_hourly(store, full: bool, now: datetime) -> None:
+    """Velas de 1 hora: o histórico inteiro, ou só as últimas horas no dia a dia."""
+    from wimcg import market
+    from wimcg.pipeline.writer import write_dataset
+
+    ds = catalog.get("btc-usd-1h")
+    full = full or _last_time(store, ds.id) is None
+    start = None if full else _last_time(store, "btc-usd-1m") - timedelta(days=market.RECENT_DAYS)
+    hourly = market.hourly_candles(load_dataset(store, "btc-usd-1m", start=start))
+    result = write_dataset(store, ds, hourly, now=now)
+    log.info("%s: %d horas (%s)", ds.id, result.rows, "histórico inteiro" if full else "período recente")
+
+
+def _derive_state(store, full: bool, now: datetime) -> None:
+    """Estado do mercado, a partir das velas de 1 hora."""
+    from wimcg import market
+    from wimcg.pipeline.writer import write_dataset
+
+    ds = catalog.get("market-state")
+    last = _last_time(store, "btc-usd-1h")
+    if last is None:
+        return
+    full = full or _last_time(store, ds.id) is None
+    start = None if full else last - timedelta(days=market.HISTORY_DAYS)
+    state = market.state(load_dataset(store, "btc-usd-1h", start=start))
+    if not full:
+        state = state[state["time"] >= last - timedelta(days=market.RECENT_DAYS)]
+    result = write_dataset(store, ds, state, now=now)
+    if not state.empty:
+        row = state.iloc[-1]
+        log.info("%s: %d horas; agora: volatilidade %s (percentil %s), regime %s, %s%% do pico", ds.id, result.rows, row["volatility_state"], row["volatility_percentile"], row["regime"], row["drawdown_pct"])
+
+
+def _derive_moves(store, full: bool, now: datetime) -> None:
+    """Grandes movimentos: os recentes no dia a dia, todos com `full`."""
     import pandas as pd
 
-    from wimcg import storage as storage_mod
     from wimcg.moves import HISTORY_DAYS, RECENT_DAYS, detect, hourly_close
-    from wimcg.pipeline.writer import write_catalog, write_dataset
+    from wimcg.pipeline.writer import write_dataset
 
-    store = storage_mod.from_env()
     ds = catalog.get("big-moves")
-    raw = store.read(manifest_key("btc-usd-1m"))
-    if not raw:
-        _error("sem velas: rode `wimcg backfill btc-usd-1m --start 2015-07-20` antes")
-        return 1
-    last = parse_time(json.loads(raw)["end"])
+    last = _last_time(store, "btc-usd-1m")
     # Sem nenhum movimento gravado ainda, calcula o histórico inteiro.
-    full = args.full or not store.read(manifest_key(ds.id))
+    full = full or not store.read(manifest_key(ds.id))
     cutoff = None if full else last - timedelta(days=RECENT_DAYS)
     start = None if full else last - timedelta(days=HISTORY_DAYS)
     candles = load_dataset(store, "btc-usd-1m", start=start, columns=["time", "close"])
     moves = detect(hourly_close(candles))
     if cutoff is not None:
         moves = moves[moves["time"] >= cutoff]
-    now = datetime.now(UTC)
     write_dataset(store, ds, moves, now=now, replace_from=cutoff or pd.Timestamp(0, tz="UTC"))
-    write_catalog(store, list(catalog.DATASETS), now=now)
-    store.commit(f"grandes movimentos até {candles['time'].max():%Y-%m-%d %H:%M}Z")
     log.info("velas desde %s (%s)", f"{candles['time'].min():%Y-%m-%d}", "histórico inteiro" if full else f"movimentos dos últimos {RECENT_DAYS} dias")
     for scale, g in moves.groupby("scale_hours"):
         log.info("escala %d h: %d movimentos (%d de alta, %d de baixa)", scale, len(g), (g.direction == "up").sum(), (g.direction == "down").sum())
+
+
+def _derive(args: argparse.Namespace, steps) -> int:
+    from wimcg import storage as storage_mod
+    from wimcg.pipeline.writer import write_catalog
+
+    store = storage_mod.from_env()
+    last = _last_time(store, "btc-usd-1m")
+    if last is None:
+        _error("sem velas: rode `wimcg backfill btc-usd-1m --start 2015-07-20` antes")
+        return 1
+    now = datetime.now(UTC)
+    for step in steps:
+        step(store, args.full, now)
+    write_catalog(store, list(catalog.DATASETS), now=now)
+    store.commit(f"derivados até {last:%Y-%m-%d %H:%M}Z")
     return 0
 
 
+def cmd_moves(args: argparse.Namespace) -> int:
+    """Recalcula os grandes movimentos: os recentes no dia a dia, todos com --full."""
+    return _derive(args, [_derive_moves])
+
+
+def cmd_derive(args: argparse.Namespace) -> int:
+    """Tudo o que é calculado das velas: velas de 1 hora, grandes movimentos e estado do mercado."""
+    return _derive(args, [_derive_hourly, _derive_moves, _derive_state])
+
+
+NEWS_DONE_KEY = "json/move-news/done.json"
+
+
 def cmd_news(args: argparse.Namespace) -> int:
+    """Busca as notícias dos grandes movimentos, do maior para o menor, uma fase por consulta.
+
+    As fases já consultadas ficam em NEWS_DONE_KEY (inclusive as que não acharam nada), então a
+    busca continua de onde parou. Com --quick, para na primeira recusa do GDELT.
+    """
     import pandas as pd
 
     from wimcg import storage as storage_mod
-    from wimcg.news import news_for_move
+    from wimcg.news import PHASES, news_for_phase
     from wimcg.pipeline.http import make_client
     from wimcg.pipeline.writer import write_catalog, write_dataset
 
     store = storage_mod.from_env()
     moves = load_dataset(store, "big-moves")
-    done = load_dataset(store, "move-news")
-    done_keys = set(zip(pd.to_datetime(done["move_time"], utc=True), done["scale_hours"].astype(int), strict=True))
+    raw = store.read(NEWS_DONE_KEY)
+    done = set(json.loads(raw)) if raw else set()
+
+    def key(move, phase: str) -> str:
+        return f"{pd.Timestamp(move['time']):%Y-%m-%dT%H:%MZ}|{int(move['scale_hours'])}|{phase}"
+
     todo = moves[pd.to_datetime(moves["time"], utc=True) >= parse_time(args.start)]
-    todo = todo[[(t, int(s)) not in done_keys for t, s in zip(pd.to_datetime(todo["time"], utc=True), todo["scale_hours"], strict=True)]]
+    todo = todo[[any(key(m, ph) not in done for ph in PHASES) for _, m in todo.iterrows()]]
+    todo = todo.sort_values("z", key=abs, ascending=False)
+    log.info("%d movimentos com notícias a buscar", len(todo))
     if args.limit:
-        todo = todo.sort_values("z", key=abs, ascending=False).head(args.limit)
-    log.info("%d movimentos sem notícias", len(todo))
+        todo = todo.head(args.limit)
     ds = catalog.get("move-news")
+    refused = False
     with make_client() as client:
-        for i, (_, move) in enumerate(todo.iterrows(), 1):
-            try:
-                rows = news_for_move(client, move)
-            except RuntimeError as exc:
-                _warning(f"notícias: {exc}")
+        for _, move in todo.iterrows():
+            for phase in PHASES:
+                if key(move, phase) in done:
+                    continue
+                try:
+                    rows = news_for_phase(client, move, phase, patient=not args.quick)
+                except RuntimeError as exc:
+                    # Na coleta de 15 em 15 minutos a recusa é esperada: tenta de novo na próxima.
+                    (log.info if args.quick else _warning)(f"notícias: {exc}")
+                    refused = True
+                    break
+                now = datetime.now(UTC)
+                write_dataset(store, ds, rows, now=now)
+                done.add(key(move, phase))
+                store.write(NEWS_DONE_KEY, json.dumps(sorted(done)).encode())
+                write_catalog(store, list(catalog.DATASETS), now=now)
+                store.commit(f"notícias do movimento de {move['time']:%Y-%m-%d %H:%M}Z ({phase})")
+                log.info("%s %+.1f%% (%d h), %s: %d notícias", f"{move['time']:%Y-%m-%d %H:%M}", move["return_pct"], move["scale_hours"], phase, len(rows))
+            if refused:
                 break
-            now = datetime.now(UTC)
-            write_dataset(store, ds, rows, now=now)
-            store.commit(f"notícias do movimento de {move['time']:%Y-%m-%d %H:%M}Z")
-            log.info("[%d/%d] %s %+.1f%% (%d h): %d notícias", i, len(todo), f"{move['time']:%Y-%m-%d %H:%M}", move["return_pct"], move["scale_hours"], len(rows))
-    write_catalog(store, list(catalog.DATASETS), now=datetime.now(UTC))
     return 0
 
 
@@ -274,9 +353,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--full", action="store_true", help="recalcula o histórico inteiro (padrão: só o período recente)")
     p.set_defaults(func=cmd_moves)
 
+    p = sub.add_parser("derive", help="recalcula o que sai das velas: velas de 1 hora, grandes movimentos e estado do mercado")
+    p.add_argument("--full", action="store_true", help="recalcula o histórico inteiro (padrão: só o período recente)")
+    p.set_defaults(func=cmd_derive)
+
     p = sub.add_parser("news", help="busca as notícias de antes, durante e depois de cada grande movimento")
     p.add_argument("--start", default="2017-01-01", help="só movimentos a partir desta data")
     p.add_argument("--limit", type=int, help="processa só os N maiores movimentos pendentes")
+    p.add_argument("--quick", action="store_true", help="para na primeira recusa do GDELT, sem esperar (para a coleta de 15 em 15 minutos)")
     p.set_defaults(func=cmd_news)
 
     p = sub.add_parser("gkg-sql", help="imprime a consulta do BigQuery com as notícias por hora (GKG do GDELT)")

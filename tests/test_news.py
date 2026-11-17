@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pandas as pd
+import pytest
 
 from wimcg import news
 
@@ -52,3 +53,66 @@ def test_title_mentions_crypto_in_several_languages():
         assert news.title_mentions_crypto(title), title
     for title in ("Savannah Guthrie renews NBC contract", "The FTC Says Older Americans Reported $3 Billion in Fraud Losses", "Something about method", None, ""):
         assert not news.title_mentions_crypto(title), title
+
+
+def test_quick_search_gives_up_on_the_first_refusal(monkeypatch):
+    monkeypatch.setattr(news, "MIN_INTERVAL", 0)
+    refuse = httpx.MockTransport(lambda r: httpx.Response(429, text="Please limit requests"))
+    with httpx.Client(transport=refuse) as client, pytest.raises(RuntimeError, match="recusou"):
+        news.search(client, pd.Timestamp("2026-01-01", tz="UTC"), pd.Timestamp("2026-01-02", tz="UTC"), patient=False)
+
+
+def test_news_command_resumes_phase_by_phase(tmp_path, monkeypatch):
+    """A busca grava cada fase assim que ela chega e continua de onde parou na execução seguinte."""
+    from wimcg import catalog
+    from wimcg.cli import NEWS_DONE_KEY, load_dataset, main
+    from wimcg.pipeline import http as http_mod
+    from wimcg.pipeline.writer import write_dataset
+    from wimcg.storage import LocalStorage
+
+    monkeypatch.setattr(news, "MIN_INTERVAL", 0)
+    monkeypatch.setenv("FS_STORAGE", "local")
+    monkeypatch.setenv("FS_DATA_DIR", str(tmp_path))
+    store = LocalStorage(tmp_path)
+    moves = pd.DataFrame(
+        {
+            "time": [pd.Timestamp("2026-02-05T20:00Z"), pd.Timestamp("2026-03-01T10:00Z")],
+            "scale_hours": [1, 1],
+            "start": [pd.Timestamp("2026-02-05T19:00Z"), pd.Timestamp("2026-03-01T09:00Z")],
+            "direction": ["down", "up"],
+            "return_pct": [-5.0, 2.0],
+            "sigma_pct": [1.0, 0.6],
+            "z": [-5.0, 3.3],
+            "price_start": [100.0, 100.0],
+            "price_end": [95.0, 102.0],
+        }
+    )
+    write_dataset(store, catalog.get("big-moves"), moves)
+
+    answers = []  # o que o GDELT falso responde, em ordem
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        kind = answers.pop(0)
+        if kind == "refuse":
+            return httpx.Response(429, text="Please limit requests")
+        arts = [] if kind == "empty" else [{"title": "Bitcoin crash", "url": f"https://x/{request.url.params['startdatetime']}", "domain": "x.com", "sourcecountry": "US", "seendate": "20260205T193000Z"}]
+        return httpx.Response(200, content=json.dumps({"articles": arts}))
+
+    monkeypatch.setattr(http_mod, "make_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+
+    # 1ª execução: a primeira fase do maior movimento chega, a segunda é recusada.
+    answers[:] = ["news", "refuse"]
+    assert main(["news", "--limit", "1", "--quick"]) == 0
+    assert json.loads(store.read(NEWS_DONE_KEY)) == ["2026-02-05T20:00Z|1|before"]
+    assert load_dataset(store, "move-news")["phase"].tolist() == ["before"]
+
+    # 2ª execução: continua da segunda fase; uma fase sem notícias também conta como feita.
+    answers[:] = ["news", "empty"]
+    assert main(["news", "--limit", "1", "--quick"]) == 0
+    assert len(json.loads(store.read(NEWS_DONE_KEY))) == 3 and not answers
+    assert sorted(load_dataset(store, "move-news")["phase"]) == ["before", "during"]
+
+    # 3ª execução: o maior movimento está completo, então passa para o seguinte.
+    answers[:] = ["news", "news", "news"]
+    assert main(["news", "--limit", "1", "--quick"]) == 0
+    assert len(json.loads(store.read(NEWS_DONE_KEY))) == 6

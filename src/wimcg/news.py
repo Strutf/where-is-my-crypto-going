@@ -74,8 +74,12 @@ def _gdelt_time(t: pd.Timestamp) -> str:
     return t.strftime("%Y%m%d%H%M%S")
 
 
-def search(client: httpx.Client, start: pd.Timestamp, end: pd.Timestamp) -> list[dict]:
-    """Artigos do GDELT entre start e end (no máximo MAX_RECORDS, os mais relevantes)."""
+def search(client: httpx.Client, start: pd.Timestamp, end: pd.Timestamp, patient: bool = True) -> list[dict]:
+    """Artigos do GDELT entre start e end (no máximo MAX_RECORDS, os mais relevantes).
+
+    Com `patient=False`, uma recusa do GDELT encerra na hora (RuntimeError) em vez de esperar:
+    é o modo da coleta de 15 em 15 minutos, que tenta de novo na execução seguinte.
+    """
     global _last_request
     params = {
         "query": QUERY,
@@ -94,11 +98,15 @@ def search(client: httpx.Client, start: pd.Timestamp, end: pd.Timestamp) -> list
         try:
             resp = client.get(URL, params=params, timeout=90)
         except httpx.TransportError as exc:
+            if not patient:
+                raise RuntimeError(f"GDELT fora do ar ({exc})") from exc
             log.warning("GDELT: %s; nova tentativa", exc)
             time.sleep(RATE_LIMIT_WAIT)
             continue
         text = resp.text.strip()
         if resp.status_code == 429 or not text.startswith("{"):
+            if not patient:
+                raise RuntimeError("GDELT recusou a consulta (limite por IP)")
             log.warning("GDELT limitou as consultas (tentativa %d); esperando %.0f s", attempt + 1, RATE_LIMIT_WAIT)
             time.sleep(RATE_LIMIT_WAIT)
             continue
@@ -106,25 +114,33 @@ def search(client: httpx.Client, start: pd.Timestamp, end: pd.Timestamp) -> list
     raise RuntimeError("GDELT continua limitando as consultas; tente mais tarde")
 
 
-def news_for_move(client: httpx.Client, move: pd.Series) -> pd.DataFrame:
+PHASES = ("before", "during", "after")
+COLUMNS = ["time", "move_time", "scale_hours", "phase", "hours_from_start", "title", "url", "domain", "source_country", "categories"]
+
+
+def news_for_phase(client: httpx.Client, move: pd.Series, phase: str, patient: bool = True) -> pd.DataFrame:
+    """Notícias de uma fase (before, during ou after) de um movimento: uma consulta ao GDELT."""
     start, end = pd.Timestamp(move["start"]), pd.Timestamp(move["time"])
-    windows = {"before": (start - WINDOW, start), "during": (start, end), "after": (end, end + WINDOW)}
+    lo, hi = {"before": (start - WINDOW, start), "during": (start, end), "after": (end, end + WINDOW)}[phase]
     rows = []
-    for phase, (lo, hi) in windows.items():
-        for a in search(client, lo, hi):
-            seen = pd.to_datetime(a["seendate"], format="%Y%m%dT%H%M%SZ", utc=True)
-            rows.append(
-                {
-                    "time": seen,
-                    "move_time": end,
-                    "scale_hours": int(move["scale_hours"]),
-                    "phase": phase,
-                    "hours_from_start": round((seen - start) / pd.Timedelta(hours=1), 2),
-                    "title": a.get("title", ""),
-                    "url": a.get("url", ""),
-                    "domain": a.get("domain", ""),
-                    "source_country": a.get("sourcecountry", ""),
-                    "categories": categorize(a.get("title", "")),
-                }
-            )
-    return pd.DataFrame(rows)
+    for a in search(client, lo, hi, patient=patient):
+        seen = pd.to_datetime(a["seendate"], format="%Y%m%dT%H%M%SZ", utc=True)
+        rows.append(
+            {
+                "time": seen,
+                "move_time": end,
+                "scale_hours": int(move["scale_hours"]),
+                "phase": phase,
+                "hours_from_start": round((seen - start) / pd.Timedelta(hours=1), 2),
+                "title": a.get("title", ""),
+                "url": a.get("url", ""),
+                "domain": a.get("domain", ""),
+                "source_country": a.get("sourcecountry", ""),
+                "categories": categorize(a.get("title", "")),
+            }
+        )
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def news_for_move(client: httpx.Client, move: pd.Series) -> pd.DataFrame:
+    return pd.concat([news_for_phase(client, move, phase) for phase in PHASES], ignore_index=True)
