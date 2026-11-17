@@ -80,6 +80,7 @@ flowchart LR
 | `fear-greed` | [alternative.me](https://alternative.me/crypto/fear-and-greed-index/) | índice de sentimento, de 0 (medo extremo) a 100 (ganância extrema) | 1 dia | fev/2018– |
 | `big-moves` | este projeto | grandes movimentos detectados nas velas | evento | jul/2015– |
 | `move-news` | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) | notícias em inglês sobre bitcoin e cripto em torno de cada movimento | evento | a depender da cobertura do GDELT |
+| `gkg-hourly` | [GDELT GKG](https://www.gdeltproject.org/data.html#rawdatafiles) | notícias por hora: total, tom médio, as de bitcoin e as de assuntos do mundo (juros, bolsas, regulação, ataques hackers, guerras, sanções) | 1 h | fev/2015– |
 
 Todas são gratuitas e não exigem cadastro.
 
@@ -166,6 +167,30 @@ modelo.
   - variáveis disponíveis só depois de publicadas: a vela só depois de fechada, a notícia só
     depois de vista pelo GDELT.
 - **Verificação ao vivo diária**, com histórico público, como no Future Space.
+
+### Lacuna conhecida no histórico de notícias por hora
+
+O `gkg-hourly` tem duas origens, com as mesmas definições de assunto:
+
+| Período | Origem | Situação |
+|---|---|---|
+| fev/2015 a 15/11/2026 | GDELT no Google BigQuery | **incompleto em cerca de um quarto das horas** |
+| de 16/11/2026 em diante | arquivos brutos do GDELT, lidos pelo GitHub Actions | completo |
+
+O GDELT publica dois arquivos a cada 15 minutos (notícias em inglês e notícias traduzidas). Em
+várias horas, a cópia do BigQuery está sem um desses arquivos, quase sempre o de traduções, e a
+hora fica com 10% a 20% menos notícias do que realmente houve. Nas horas em que o BigQuery tem
+os 8 arquivos, a agregação dos arquivos brutos dá números idênticos aos dele.
+
+- **Tamanho:** 26.748 das 101.789 horas (26,3%), pela comparação entre a contagem do BigQuery e
+  o tamanho dos arquivos publicados (`python research/gkg_gaps.py`). É uma estimativa, não uma
+  contagem.
+- **Efeito:** as contagens do histórico estão subestimadas nessas horas, e as da coleta ao vivo
+  não. Proporções (assunto ÷ total de notícias) sofrem menos que contagens brutas.
+- **Marcação:** as colunas `en_files` e `translated_files` dizem quantos arquivos formaram cada
+  hora (4 = completa). No histórico elas estão vazias, porque a cota gratuita do BigQuery acabou
+  antes da consulta que as preencheria.
+- **Conserto, ainda não feito:** refazer o histórico pelos arquivos brutos (7,2 TB).
 
 ## Como reproduzir
 

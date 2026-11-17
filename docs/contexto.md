@@ -60,8 +60,24 @@ acordos de paz.
     2021), ele está sem um arquivo inteiro de traduções, embora o arquivo exista e tenha sido
     publicado no horário. A hora fica com 15% a 20% menos notícias. Por isso o dataset tem as
     colunas `en_files` e `translated_files` (arquivos de 15 min que entraram na hora; 4 =
-    completa). Ao vivo elas já saem preenchidas; no histórico dependem da consulta leve
-    `wimcg gkg-sql --files`, **ainda não rodada**;
+    completa). Ao vivo elas já saem preenchidas; no histórico ficam vazias;
+  - **tamanho da lacuna (estimativa, `python research/gkg_gaps.py`):** comparando `articles`
+    com o tamanho dos arquivos publicados pelo GDELT, **26.748 das 101.789 horas do histórico
+    (26,3%) parecem incompletas no BigQuery**, de 11,8% (2017) a 45,1% (2020) conforme o ano.
+    Em 15.804 horas faltam de 10% a 20% das notícias, em 3.391 de 20% a 30% e em 1.543 mais de
+    30%. Na fonte, 95,3% das horas têm os 8 arquivos. A estimativa separa bem as 10 horas
+    conferidas arquivo por arquivo (completas: razão de 0,99 a 1,02; sem um arquivo de
+    traduções: de 0,80 a 0,86), mas não é uma contagem;
+  - **decisão (17/11/2026): o histórico fica como está, com a lacuna documentada**, para o
+    projeto sair do zero. Consequências a lembrar no treino: as contagens do histórico estão
+    subestimadas em cerca de um quarto das horas, e as da coleta ao vivo (desde 16/11/2026) não.
+    Proporções (assunto ÷ `articles`) sofrem menos que contagens brutas. O ganho das notícias
+    medido na fase 3 pode sair menor do que seria com o histórico correto;
+  - **como consertar depois:** (a) marcar as horas com a consulta leve `wimcg gkg-sql --files`,
+    que não rodou porque a cota gratuita do BigQuery de novembro acabou nas duas consultas
+    grandes; ou (b) refazer o histórico pelos arquivos brutos no Actions, com o mesmo conector
+    da coleta ao vivo: são 7,2 TB em 804 mil arquivos (estimativa de ~100 horas de máquina, não
+    medida). A opção (b) dispensa o BigQuery;
   - **armadilha do endereço público:** https://data.gdeltproject.org guarda por 1 hora a
     resposta 404 de quem pediu um arquivo antes de ele ser publicado. Em 17/11/2026, dois
     arquivos já publicados e listados ainda davam 404. O conector lê direto do armazenamento
@@ -150,10 +166,11 @@ Plano:
 1. Conferir a carga das velas desde 2015 (cobertura, buracos da Coinbase) e os grandes
    movimentos do histórico completo; registrar os números aqui.
 2. Conferir as primeiras coletas disparadas pelo cron-job.org (uma a cada 15 min, 1 a 2 min).
-3. Rodar no BigQuery a consulta leve `wimcg gkg-sql --files` (2015-02-19 até hoje), juntar com
-   `wimcg gkg-pack ... --files` e reimportar, para marcar as horas incompletas do histórico.
-4. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
-5. Página do dataset no Hugging Face, com a descrição de cada tabela.
-6. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
+3. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
+4. Página do dataset no Hugging Face, com a descrição de cada tabela e a lacuna do histórico
+   de notícias.
+5. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
    completa. Depois, o ganho das notícias sobre a linha de base.
-7. **Fase 4:** API e site.
+6. **Fase 4:** API e site.
+
+Adiado de propósito: consertar a lacuna do histórico de notícias (ver "GDELT, arquivos brutos").

@@ -63,6 +63,8 @@ ruff check src tests && pytest -q
   Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min.
 - `history/gkg-hourly.parquet`: histórico exportado do BigQuery (~3 MB). O Actions o grava no
   Hugging Face, já que o token só existe lá.
+- `research/gkg_gaps.py`: estimativa das horas incompletas no histórico do BigQuery (~26%).
+  A lacuna foi aceita por enquanto e está descrita no README e em `docs/contexto.md`.
 - `.github/workflows/ingest.yml`: coleta a cada 15 min (disparada pelo cron-job.org), mais
   carga histórica por `workflow_dispatch` (`backfill`, `desde`, `ate`; `backfill: gkg-history`
   importa o Parquet).

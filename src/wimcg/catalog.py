@@ -222,10 +222,14 @@ DATASETS: tuple[Dataset, ...] = (
         notes="Uma hora só é gravada depois que o GDELT publica todos os arquivos dela (cerca de "
         "20 min depois do fim da hora). Horas em que o GDELT não publicou nada não têm linha (a "
         "maior falha vai de 14/06 a 02/07/2025). Quando en_files ou translated_files é menor que "
-        "4, faltou um arquivo de 15 min e as contagens da hora estão subestimadas: no histórico "
-        "do BigQuery isso acontece em várias horas com as traduções. Colunas de arquivos vazias "
-        "= hora extraída antes de elas existirem. Os temas de EPU_UNCERTAINTY só se firmam em "
-        "2016; antes disso trate world_uncertainty_articles como ausente.",
+        "4, faltou um arquivo de 15 min e as contagens da hora estão subestimadas. LACUNA "
+        "CONHECIDA: até 15/11/2026 os dados vêm do BigQuery, que está sem arquivos inteiros "
+        "(quase sempre de traduções) em cerca de um quarto das horas (estimativa de 26%, por "
+        "research/gkg_gaps.py); nelas faltam em geral de 10% a 20% das notícias, e as colunas "
+        "de arquivos estão vazias porque não foi possível marcá-las. De 16/11/2026 em diante os "
+        "dados vêm dos arquivos brutos e são completos. Prefira proporções (assunto / articles) "
+        "a contagens brutas. Os temas de EPU_UNCERTAINTY só se firmam em 2016; antes disso "
+        "trate world_uncertainty_articles como ausente.",
     ),
 )
 
