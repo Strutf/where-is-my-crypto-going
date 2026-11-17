@@ -25,8 +25,7 @@
     "api": "API aberta",
     "data": "Dados no Hugging Face",
     "code": "Código no GitHub",
-    "author": "Feito por",
-    "sister": "Projeto irmão:"
+    "author": "Feito por"
   },
   "home": {
     "btc_label": "Bitcoin · BTC-USD · Coinbase",
@@ -61,7 +60,13 @@
     "horizon_label": "Horizonte",
     "h_all": "Todos",
     "bt_title": "Teste com dados do passado",
-    "bt_note": "Mês a mês, o modelo é treinado só com os 3 anos anteriores a cada mês e testado naquele mês."
+    "bt_note": "Mês a mês, o modelo é treinado só com os 3 anos anteriores a cada mês e testado naquele mês.",
+    "cmp_title": "Previsão contra a realidade",
+    "cmp_aria": "Gráfico que compara cada previsão com o que aconteceu. Aponte ou toque numa coluna para ver os detalhes.",
+    "view_label": "O que comparar",
+    "v_ret": "Retorno",
+    "v_vol": "Oscilação",
+    "v_acc": "Acerto"
   },
   "news": {
     "title": "Bitcoin nas notícias",
@@ -157,6 +162,20 @@
     "tone_neutral": "tom neutro",
     "no_news": "Nenhuma notícia neste período",
     "theme_light": "Mudar para claro",
-    "theme_dark": "Mudar para escuro"
+    "theme_dark": "Mudar para escuro",
+    "cmp_note_ret": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente se mexeu; a cruz é o movimento que o modelo esperava. Os movimentos esperados pelo modelo ficam perto de zero: ele raramente aposta em movimentos grandes.",
+    "cmp_note_vol": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente oscilou; a cruz é a previsão do modelo, e o quadrado, a regra simples de repetir a última oscilação. Quanto mais perto do topo da barra, menor o erro.",
+    "cmp_note_acc": "Parte das direções certas desde o início, previsão após previsão, do modelo e das duas regras sem modelo. Com poucas previsões, as linhas oscilam bastante.",
+    "model_return": "O modelo esperava",
+    "real_return": "Movimento real",
+    "miss_by": "errou por",
+    "real_swing": "Oscilação real",
+    "model_swing": "Modelo",
+    "repeat_swing": "Repetir a última",
+    "after_n": "Depois de {n} previsões",
+    "legend_real_return": "movimento real",
+    "legend_model": "modelo",
+    "legend_real_swing": "oscilação real",
+    "legend_repeat": "repetir a última"
   }
 }

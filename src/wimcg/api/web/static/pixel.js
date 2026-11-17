@@ -137,6 +137,108 @@
     clearHover() { this.hover = -1; this.tip.hidden = true; this.draw(); }
   }
 
+  // Gráfico de previsto contra real, em pixel: uma coluna por previsão, com barras (o real),
+  // marcadores (o previsto e as referências) e linhas. A largura interna acompanha o número de
+  // previsões (3 pontos cada), e a imagem é ampliada sem suavizar.
+  class PixelPlot {
+    constructor(box) {
+      this.box = box;
+      this.cv = box.querySelector("canvas"); this.ctx = this.cv.getContext("2d");
+      this.tip = box.querySelector(".tip");
+      this.H = this.cv.height; this.hover = -1; this.n = 0;
+      const move = (e) => this.onMove(e);
+      this.cv.addEventListener("pointermove", move);
+      this.cv.addEventListener("pointerdown", move);
+      this.cv.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") { this.hover = -1; this.tip.hidden = true; this.draw(); } });
+      themeListeners.push(() => this.draw());
+      addEventListener("resize", () => this.draw());
+    }
+    // spec: { n, times[], bars[{v, color}], marks[[{v, color, shape}]], lines[{values[], color}], zero, fmt, tip(i) }
+    set(spec) {
+      this.s = spec; this.n = spec.n; this.hover = -1; this.tip.hidden = true;
+      this.W = Math.max(90, Math.min(600, spec.n * 3));
+      this.cv.width = this.W;
+      this.cv.style.aspectRatio = `${this.W} / ${this.H}`;
+      this.cv.style.maxHeight = "340px";
+      const vals = [];
+      (spec.bars || []).forEach((b) => b && vals.push(b.v));
+      (spec.marks || []).forEach((ms) => ms.forEach((m) => m && vals.push(m.v)));
+      (spec.lines || []).forEach((l) => l.values.forEach((v) => v != null && vals.push(v)));
+      if (spec.zero) vals.push(0);
+      let lo = Math.min(...vals), hi = Math.max(...vals);
+      if (spec.range) [lo, hi] = spec.range;
+      if (hi === lo) { hi += 1; lo -= 1; }
+      this.lo = lo; this.hi = hi;
+      this.draw();
+    }
+    y(v) { return Math.round(3 + (this.hi - v) / (this.hi - this.lo) * (this.H - 7)); }
+    x(i) { return Math.floor((i + 0.5) * this.W / this.n); }
+    draw() {
+      if (!this.s) return;
+      const { ctx, W, H, s } = this;
+      ctx.fillStyle = tok("panel2"); ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = tok("grid");
+      for (let gy = 10; gy < H; gy += 16) for (let x = 0; x < W; x += 2) ctx.fillRect(x, gy, 1, 1);
+      const base = s.zero ? this.y(0) : H - 1;
+      if (s.zero) { ctx.fillStyle = tok("muted"); ctx.fillRect(0, base, W, 1); }
+      const colW = Math.max(1, Math.floor(W / this.n) - 1);
+      (s.bars || []).forEach((b, i) => {
+        if (!b) return;
+        const x0 = this.x(i) - Math.floor(colW / 2), y1 = this.y(b.v);
+        ctx.fillStyle = tok(b.color);
+        // Barra em xadrez, para o previsto (sólido) se destacar por cima.
+        for (let y = Math.min(base, y1); y <= Math.max(base, y1); y++) for (let x = x0; x < x0 + colW; x++) if ((x + y) % 2 === 0 || colW === 1) ctx.fillRect(x, y, 1, 1);
+      });
+      (s.lines || []).forEach((l) => {
+        ctx.fillStyle = tok(l.color);
+        let prev = null;
+        l.values.forEach((v, i) => {
+          if (v == null) { prev = null; return; }
+          const x = this.x(i), y = this.y(v);
+          if (prev) { ctx.fillRect(prev.x, prev.y, Math.max(1, x - prev.x), 1); ctx.fillRect(x, Math.min(prev.y, y), 1, Math.abs(y - prev.y) + 1); }
+          else ctx.fillRect(x, y, 1, 1);
+          prev = { x, y };
+        });
+      });
+      (s.marks || []).forEach((ms, i) => ms.forEach((m) => {
+        if (!m) return;
+        const x = this.x(i), y = this.y(m.v);
+        ctx.fillStyle = tok("panel2");
+        ctx.fillRect(x - 2, y - 2, 5, 5);
+        ctx.fillStyle = tok(m.color);
+        if (m.shape === "square") ctx.fillRect(x - 1, y - 1, 3, 3);
+        else { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); }
+      }));
+      if (this.hover >= 0) {
+        ctx.fillStyle = tok("ink");
+        for (let y = 0; y < H; y += 2) ctx.fillRect(this.x(this.hover), y, 1, 1);
+      }
+      const yl = this.box.querySelectorAll(".yl");
+      if (yl.length === 2) {
+        yl[0].textContent = s.fmt(this.hi); yl[0].style.top = (this.cv.offsetTop - 2) + "px";
+        yl[1].textContent = s.fmt(this.lo); yl[1].style.top = (this.cv.offsetTop + this.cv.offsetHeight - 20) + "px";
+      }
+      const xl = this.box.querySelector(".xl");
+      if (xl && s.times.length) {
+        const idx = [...new Set([0, Math.floor(this.n / 2), this.n - 1])];
+        xl.innerHTML = idx.map((i) => `<span>${fmtTime(s.times[i])}</span>`).join("");
+      }
+    }
+    onMove(e) {
+      if (!this.n) return;
+      const r = this.cv.getBoundingClientRect();
+      const i = Math.max(0, Math.min(this.n - 1, Math.floor((e.clientX - r.left) / r.width * this.n)));
+      this.hover = i; this.draw();
+      this.tip.hidden = false;
+      this.tip.innerHTML = this.s.tip(i);
+      const box = this.box.getBoundingClientRect();
+      const px = r.left - box.left + this.x(i) / this.W * r.width;
+      const w = this.tip.offsetWidth;
+      this.tip.style.left = (px + 14 + w > box.width - 8 ? Math.max(8, px - w - 14) : px + 14) + "px";
+      this.tip.style.top = (r.top - box.top + 8) + "px";
+    }
+  }
+
   // Cena ao lado do gráfico: neve caindo (mercado em baixa) ou poeira e vapor (em alta).
   class Scene {
     constructor(box) {
@@ -210,5 +312,5 @@
     document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon, Number(el.dataset.scale || 3)); });
   });
 
-  window.WIMCG = { t, tok, LANG, LOCALE, fmtUSD, fmtPct, fmtTime, getJson, icon, forecastCards, PixelChart, Scene, onTheme: (f) => themeListeners.push(f) };
+  window.WIMCG = { t, tok, LANG, LOCALE, fmtUSD, fmtPct, fmtTime, getJson, icon, forecastCards, PixelChart, PixelPlot, Scene, onTheme: (f) => themeListeners.push(f) };
 })();

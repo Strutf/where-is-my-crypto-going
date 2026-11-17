@@ -144,6 +144,12 @@ td { padding: 6px 10px; border-bottom: 2px dotted var(--grid); vertical-align: m
 td.r, th.r { text-align: right; }
 .res { display: inline-flex; align-items: center; gap: 6px; }
 .note { font-size: 15px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 15px; color: var(--muted); }
+.legend .sw { display: inline-block; width: 14px; height: 14px; }
+.legend .sw.bar { background: repeating-conic-gradient(var(--c) 0 25%, transparent 0 50%) 0 0 / 4px 4px; box-shadow: 0 0 0 2px var(--c); }
+.legend .sw.cross { background: linear-gradient(var(--c), var(--c)) center / 100% 4px no-repeat, linear-gradient(var(--c), var(--c)) center / 4px 100% no-repeat; }
+.legend .sw.square { background: var(--c); width: 10px; height: 10px; }
+.legend .sw.line { height: 4px; background: var(--c); width: 18px; }
 .empty { padding: 18px; font-family: var(--label); font-size: 12px; text-transform: uppercase; color: var(--muted); }
 
 /* Notícias */
