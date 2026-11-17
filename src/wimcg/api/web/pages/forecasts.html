@@ -1,0 +1,118 @@
+<main style="display:grid;gap:36px">
+  <section class="section">
+    <header>
+      <h1>{{t:fc.title}}</h1>
+      <p>{{t:fc.intro}}</p>
+      <p class="note">{{t:fc.caveat}}</p>
+    </header>
+  </section>
+
+  <section class="section" aria-labelledby="now-h">
+    <header><h2 id="now-h">{{t:fc.now_title}}</h2><p class="note" id="issued"></p></header>
+    <div class="cards" id="cards"><div class="empty">{{t:home.loading}}</div></div>
+  </section>
+
+  <section class="section" aria-labelledby="score-h">
+    <header>
+      <h2 id="score-h">{{t:fc.score_title}}</h2>
+      <p class="note">{{t:fc.score_note}}</p>
+    </header>
+    <div class="btns" role="group" aria-label="{{t:fc.window_label}}">
+      <button class="btn" type="button" data-win="7d" aria-pressed="false">{{t:fc.w7}}</button>
+      <button class="btn" type="button" data-win="30d" aria-pressed="false">{{t:fc.w30}}</button>
+      <button class="btn" type="button" data-win="all" aria-pressed="true">{{t:fc.wall}}</button>
+    </div>
+    <div class="tbl px inset"><table id="score"></table></div>
+    <p class="note" id="score-foot"></p>
+  </section>
+
+  <section class="section" aria-labelledby="log-h">
+    <header>
+      <h2 id="log-h">{{t:fc.log_title}}</h2>
+      <p class="note">{{t:fc.log_note}}</p>
+    </header>
+    <div class="btns" role="group" aria-label="{{t:fc.horizon_label}}">
+      <button class="btn" type="button" data-h="0" aria-pressed="true">{{t:fc.h_all}}</button>
+      <button class="btn" type="button" data-h="1" aria-pressed="false">1 h</button>
+      <button class="btn" type="button" data-h="4" aria-pressed="false">4 h</button>
+      <button class="btn" type="button" data-h="24" aria-pressed="false">24 h</button>
+    </div>
+    <div class="tbl px inset"><table id="log"></table></div>
+  </section>
+
+  <section class="section" aria-labelledby="bt-h">
+    <header>
+      <h2 id="bt-h">{{t:fc.bt_title}}</h2>
+      <p class="note" id="bt-note">{{t:fc.bt_note}}</p>
+    </header>
+    <div class="tbl px inset"><table id="bt"></table></div>
+  </section>
+</main>
+<script>
+(() => {
+  const { t, getJson, fmtUSD, fmtPct, fmtTime, icon, forecastCards } = WIMCG;
+  const pct = (v) => (v * 100).toFixed(1) + "%";
+  const best = (vals, higher = true) => { const m = higher ? Math.max(...vals) : Math.min(...vals); return vals.map((v) => v === m); };
+
+  getJson("/v1/datasets/predictions/latest").then(({ data }) => {
+    data.sort((a, b) => a.horizon_hours - b.horizon_hours);
+    document.getElementById("cards").innerHTML = forecastCards(data);
+    document.getElementById("issued").textContent = t("issued_at").replace("{time}", fmtTime(data[0].time)).replace("{model}", data[0].model_version);
+  }).catch(() => { document.getElementById("cards").innerHTML = `<div class="empty">${t("no_forecast")}</div>`; });
+
+  // Placar: o modelo e as referências nas mesmas previsões.
+  let summary = null;
+  function renderScore(win) {
+    document.querySelectorAll("[data-win]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.win === win));
+    const rows = summary.windows[win] || [];
+    const head = `<tr><th>${t("horizon")}</th><th class="r">${t("checked")}</th><th class="r">${t("model_hits")}</th><th class="r">${t("always_up")}</th><th class="r">${t("opposite")}</th><th class="r">${t("swing_err_model")}</th><th class="r">${t("swing_err_naive")}</th></tr>`;
+    const body = rows.map((r) => {
+      const [a, b, c] = best([r.accuracy, r.always_up_accuracy, r.reversal_accuracy]);
+      const [v1, v2] = best([r.volatility_mae_pct, r.volatility_mae_persistence_pct], false);
+      const mark = (on, txt) => on ? `<b style="color:var(--accent);font-weight:400">${txt}</b>` : txt;
+      return `<tr><td>${r.horizon_hours} h</td><td class="r">${r.n}</td><td class="r">${mark(a, pct(r.accuracy))}</td><td class="r">${mark(b, pct(r.always_up_accuracy))}</td><td class="r">${mark(c, pct(r.reversal_accuracy))}</td>
+        <td class="r">${mark(v1, r.volatility_mae_pct.toFixed(2) + " pp")}</td><td class="r">${mark(v2, r.volatility_mae_persistence_pct.toFixed(2) + " pp")}</td></tr>`;
+    }).join("");
+    document.getElementById("score").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
+    const n = Math.min(...rows.map((r) => r.n), Infinity);
+    document.getElementById("score-foot").textContent = (n < 500 ? t("too_few") + " " : "") + t("since").replace("{time}", summary.since ? fmtTime(summary.since, { dateOnly: true, year: true }) : "—");
+  }
+  getJson("/v1/verification/summary").then((s) => { summary = s; renderScore("all"); })
+    .catch(() => { document.getElementById("score").innerHTML = `<tr><td class="empty">${t("nothing_checked")}</td></tr>`; });
+  document.querySelectorAll("[data-win]").forEach((b) => b.addEventListener("click", () => summary && renderScore(b.dataset.win)));
+
+  // Registro: cada previsão conferida, da mais recente para a mais antiga.
+  let log = [];
+  function renderLog(h) {
+    document.querySelectorAll("[data-h]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.h === String(h)));
+    const rows = log.filter((r) => !h || r.horizon_hours === h).slice(0, 96);
+    const head = `<tr><th>${t("issued")}</th><th>${t("horizon")}</th><th>${t("said")}</th><th class="r">${t("up_chance")}</th><th>${t("happened")}</th><th>${t("result")}</th><th class="r">${t("swing_pred_obs")}</th></tr>`;
+    const body = rows.map((r) => {
+      const said = `<span class="res ${r.direction}">${icon(r.direction, 2)} ${t(r.direction)}</span>`;
+      const obs = `<span class="res ${r.observed_direction}">${icon(r.observed_direction, 2)} ${fmtPct(r.observed_return_pct)}</span>`;
+      const res = r.hit ? `<span class="res up">${icon("check", 2)} ${t("hit")}</span>` : `<span class="res down">${icon("cross", 2)} ${t("miss")}</span>`;
+      return `<tr><td>${fmtTime(r.time)}</td><td>${r.horizon_hours} h</td><td>${said}</td><td class="r">${pct(r.prob_up)}</td><td>${obs}</td><td>${res}</td>
+        <td class="r">${r.pred_volatility_pct.toFixed(2)}% / ${r.observed_volatility_pct.toFixed(2)}%</td></tr>`;
+    }).join("");
+    document.getElementById("log").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
+  }
+  const end = new Date(Math.ceil(Date.now() / 3600e3) * 3600e3), start = new Date(end - 7 * 86400e3);
+  getJson(`/v1/datasets/verification/data?start=${start.toISOString().slice(0, 13)}:00&end=${end.toISOString().slice(0, 13)}:00`)
+    .then(({ data }) => { log = data.sort((a, b) => (a.time < b.time ? 1 : -1)); renderLog(0); })
+    .catch(() => { document.getElementById("log").innerHTML = `<tr><td class="empty">${t("load_error")}</td></tr>`; });
+  document.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => renderLog(Number(b.dataset.h))));
+
+  // Teste no passado (avaliação mês a mês do modelo publicado).
+  getJson("/v1/models/current").then((m) => {
+    const ev = m.evaluation;
+    const head = `<tr><th>${t("horizon")}</th><th class="r">${t("model_hits")}</th><th class="r">${t("always_up")}</th><th class="r">${t("opposite")}</th><th class="r">${t("swing_err_model")}</th><th class="r">${t("swing_err_har")}</th><th class="r">${t("swing_err_naive")}</th></tr>`;
+    const body = Object.keys(ev.direction).map((h) => {
+      const d = ev.direction[h], v = ev.volatility[h];
+      return `<tr><td>${h} h</td><td class="r">${pct(d.accuracy)}</td><td class="r">${pct(d.always_up)}</td><td class="r">${pct(d.reversal)}</td>
+        <td class="r">${v.gb_mae.toFixed(2)} pp</td><td class="r">${v.har_mae.toFixed(2)} pp</td><td class="r">${v.persistence_mae.toFixed(2)} pp</td></tr>`;
+    }).join("");
+    document.getElementById("bt").innerHTML = head + body;
+    document.getElementById("bt-note").textContent = t("bt_period").replace("{from}", ev.period[0]).replace("{to}", ev.period[1]).replace("{model}", m.model_version);
+  }).catch(() => { document.getElementById("bt").innerHTML = `<tr><td class="empty">${t("load_error")}</td></tr>`; });
+})();
+</script>

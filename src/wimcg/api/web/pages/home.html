@@ -1,0 +1,102 @@
+<main style="display:grid;gap:36px">
+  <section class="home" aria-labelledby="home-h">
+    <div class="chart-box">
+      <h1 id="home-h" class="lbl" style="font-family:var(--label);font-size:12px;font-weight:400">{{t:home.btc_label}}</h1>
+      <div class="chart-head">
+        <div><span class="price" id="price">—</span> <span class="chg" id="chg"></span></div>
+        <div class="btns" role="group" aria-label="{{t:home.range_label}}">
+          <button class="btn" type="button" data-range="24" aria-pressed="false">{{t:home.r1d}}</button>
+          <button class="btn" type="button" data-range="168" aria-pressed="false">{{t:home.r7d}}</button>
+          <button class="btn" type="button" data-range="720" aria-pressed="true">{{t:home.r30d}}</button>
+          <button class="btn" type="button" data-range="8760" aria-pressed="false">{{t:home.r1y}}</button>
+        </div>
+      </div>
+      <div class="chart px inset" id="chart">
+        <span class="yl"></span><span class="yl"></span>
+        <canvas width="240" height="80" aria-label="{{t:home.chart_aria}}"></canvas>
+        <div class="xl"></div>
+        <div class="tip px" hidden></div>
+        <div class="msg" id="chart-msg">{{t:home.loading}}</div>
+      </div>
+      <p class="note">{{t:home.chart_note}}</p>
+      <div class="chips">
+        <span class="chip px inset">{{t:home.swings}} <b id="vol">—</b></span>
+        <span class="chip px inset">{{t:home.regime}} <b id="reg">—</b></span>
+        <span class="chip px inset">{{t:home.from_high}} <b id="dd">—</b></span>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="scene px inset" id="scene">
+        <canvas width="80" height="72" aria-hidden="true"></canvas>
+        <img class="char" id="char" alt="" hidden>
+        <span class="tag" id="scene-tag">—</span>
+      </div>
+      <p id="regime-text"></p>
+    </aside>
+  </section>
+
+  <section class="section" aria-labelledby="next-h">
+    <header>
+      <h2 id="next-h">{{t:home.next_title}}</h2>
+      <p class="note">{{t:home.next_note}}</p>
+    </header>
+    <div class="cards" id="cards"><div class="empty">{{t:home.loading}}</div></div>
+    <p><a class="btn" href="{{url:forecasts}}">{{t:home.see_forecasts}}</a></p>
+  </section>
+</main>
+<script>
+(() => {
+  const { t, getJson, fmtUSD, fmtPct, fmtTime, forecastCards, PixelChart, Scene } = WIMCG;
+  const chart = new PixelChart(document.getElementById("chart"));
+  const scene = new Scene(document.getElementById("scene"));
+  const msg = document.getElementById("chart-msg");
+
+  // Intervalo arredondado à hora: os mesmos endereços na mesma hora aproveitam o cache.
+  function window_(hours) {
+    const end = new Date(Math.ceil(Date.now() / 3600e3) * 3600e3);
+    const start = new Date(end - hours * 3600e3);
+    return `start=${start.toISOString().slice(0, 13)}:00&end=${end.toISOString().slice(0, 13)}:00`;
+  }
+
+  async function loadChart(hours) {
+    document.querySelectorAll("[data-range]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.range === String(hours)));
+    msg.hidden = false; msg.textContent = t("loading");
+    try {
+      const body = await getJson(`/v1/datasets/btc-usd-1h/data?${window_(hours)}&fields=close`);
+      if (body.data.length < 2) { msg.textContent = t("no_data"); return; }
+      msg.hidden = true;
+      chart.setData(body.data, { hourLabels: hours <= 24 });
+      if (hours === 720) {
+        const d = body.data, last = d[d.length - 1], prev = d[Math.max(0, d.length - 25)];
+        const chg = (last.close / prev.close - 1) * 100;
+        document.getElementById("price").textContent = fmtUSD(last.close, 0);
+        const el = document.getElementById("chg");
+        el.textContent = `${fmtPct(chg)} ${t("in_24h")}`;
+        el.className = "chg " + (chg > 0 ? "up" : "down");
+      }
+    } catch (e) { msg.hidden = false; msg.textContent = t("load_error"); }
+  }
+  document.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", () => loadChart(Number(b.dataset.range))));
+  loadChart(720);
+
+  getJson("/v1/datasets/market-state/latest").then(({ data }) => {
+    const s = data[0];
+    const vol = document.getElementById("vol");
+    vol.textContent = `${t("vol_" + s.volatility_state)} · ${Math.round(s.volatility_percentile)}%`;
+    vol.style.color = "var(--frost)";
+    document.getElementById("reg").textContent = t(s.regime);
+    document.getElementById("dd").textContent = fmtPct(s.drawdown_pct, 1);
+    const mode = s.regime === "bear" ? "bear" : "bull";
+    scene.setMode(mode);
+    document.getElementById("scene-tag").textContent = t(mode + "_market");
+    const img = document.getElementById("char");
+    if (window.ASSETS && window.ASSETS[mode]) { img.src = window.ASSETS[mode]; img.alt = t(mode + "_alt"); img.hidden = false; }
+    document.getElementById("regime-text").textContent = t("regime_text_" + mode)
+      .replace("{ma50}", fmtUSD(s.ma_50d, 0)).replace("{ma200}", fmtUSD(s.ma_200d, 0)).replace("{dd}", fmtPct(s.drawdown_pct, 1, false));
+  }).catch(() => { document.getElementById("regime-text").textContent = t("load_error"); });
+
+  getJson("/v1/datasets/predictions/latest").then(({ data }) => {
+    document.getElementById("cards").innerHTML = forecastCards(data.sort((a, b) => a.horizon_hours - b.horizon_hours));
+  }).catch(() => { document.getElementById("cards").innerHTML = `<div class="empty">${t("no_forecast")}</div>`; });
+})();
+</script>

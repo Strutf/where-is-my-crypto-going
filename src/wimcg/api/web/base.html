@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="{{t:lang}}" data-lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{title}}</title>
+<meta name="description" content="{{t:meta.description}}">
+{{hreflang_links}}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=Silkscreen:wght@400;700&family=VT323&display=swap">
+<link rel="stylesheet" href="{{static:pixel.css}}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23f08a12' d='M2 0h4v1H2zM1 1h1v1H1zM6 1h1v1H6zM0 2h1v5H0zM7 2h1v5H7zM2 2h3v1H2zM2 3h1v1H2zM5 3h1v1H5zM2 4h3v1H2zM2 5h1v1H2zM5 5h1v1H5zM2 6h3v1H2zM1 7h1v1H1zM6 7h1v1H6zM2 8h4v1H2z'/%3E%3C/svg%3E">
+<!-- O tema escolhido no botão vale antes de desenhar a página, para não piscar. -->
+<script>try { var m = localStorage.getItem("wimcg-theme"); if (m === "light" || m === "dark") document.documentElement.dataset.theme = m; } catch (e) {}</script>
+<!-- Textos usados pelos scripts, do arquivo de tradução do idioma, e imagens dos personagens. -->
+<script>window.T = {{js_i18n}}; window.ASSETS = {{assets}};</script>
+<script src="{{static:pixel.js}}"></script>
+</head>
+<body data-page="{{page}}">
+<div class="notice">{{t:notice}}</div>
+<div class="page">
+  <header class="top">
+    <a class="brand" href="{{url:home}}">
+      <span class="logo">Where Is My<br><span>Crypto</span> Going?</span>
+      {{mascot}}
+    </a>
+    <nav class="nav" aria-label="{{t:nav.aria}}">
+      <a href="{{url:home}}" data-nav="home">{{t:nav.home}}</a>
+      <a href="{{url:forecasts}}" data-nav="forecasts">{{t:nav.forecasts}}</a>
+      <a href="{{url:about}}" data-nav="about">{{t:nav.about}}</a>
+      <a href="{{url:news}}" data-nav="news">{{t:nav.news}}</a>
+      <span class="tools">
+        {{lang_switch}}
+        <button class="btn" type="button" id="theme-btn" aria-label="{{t:nav.theme}}"></button>
+      </span>
+    </nav>
+  </header>
+  <script>document.querySelector('[data-nav="{{page}}"]').setAttribute("aria-current", "page");</script>
+  {{content}}
+  <footer class="footer">
+    <p>{{t:footer.disclaimer}}</p>
+    <p>
+      <a href="/docs">{{t:footer.api}}</a> ·
+      <a href="https://huggingface.co/datasets/Strutf/where-is-my-crypto-going" rel="noopener">{{t:footer.data}}</a> ·
+      <a href="https://github.com/Strutf/where-is-my-crypto-going" rel="noopener">{{t:footer.code}}</a>
+    </p>
+    <p>
+      {{t:footer.author}} <a href="https://github.com/Strutf" rel="noopener">Victor Miranda Florido</a> ·
+      <a href="https://orcid.org/0009-0002-4580-2122" rel="noopener">ORCID</a> ·
+      {{t:footer.sister}} <a href="https://future-space-six.vercel.app" rel="noopener">Future Space</a>
+    </p>
+  </footer>
+</div>
+</body>
+</html>

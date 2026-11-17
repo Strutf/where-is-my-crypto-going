@@ -1,0 +1,49 @@
+<main style="display:grid;gap:28px">
+  <section class="section">
+    <header>
+      <h1>{{t:news.title}}</h1>
+      <p>{{t:news.intro}}</p>
+      <p class="note">{{t:news.safety}}</p>
+    </header>
+    <div class="btns" role="group" aria-label="{{t:news.filter_label}}">
+      <button class="btn" type="button" data-all="0" aria-pressed="true">{{t:news.only_btc}}</button>
+      <button class="btn" type="button" data-all="1" aria-pressed="false">{{t:news.everything}}</button>
+    </div>
+  </section>
+  <section class="news" id="news" aria-live="polite"><div class="empty">{{t:home.loading}}</div></section>
+  <p class="note">{{t:news.timeline_soon}}</p>
+</main>
+<script>
+(() => {
+  const { t, getJson, fmtTime } = WIMCG;
+  let items = [];
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Só endereços http(s): o filtro de veículos já roda na coleta; isto é uma segunda trava.
+  const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : null;
+  const tone = (v) => v <= -2 ? ["tone_neg", "down"] : v >= 2 ? ["tone_pos", "up"] : ["tone_neutral", "muted"];
+
+  function render(all) {
+    document.querySelectorAll("[data-all]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.all === (all ? "1" : "0")));
+    const rows = items.filter((n) => all || n.in_title).slice(0, 120);
+    document.getElementById("news").innerHTML = rows.length ? rows.map((n) => {
+      const url = safeUrl(n.url);
+      const [toneKey, toneCls] = tone(n.tone);
+      const title = esc(n.title || n.url);
+      return `<article class="item px">
+        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer nofollow">${title}</a>` : `<span>${title}</span>`}
+        <span class="meta"><span>${esc(n.domain)}</span><span>${fmtTime(n.time)} UTC</span>${n.language && n.language !== "eng" ? `<span>${esc(n.language.toUpperCase())}</span>` : ""}<span class="${toneCls}">${t(toneKey)}</span></span>
+      </article>`;
+    }).join("") : `<div class="empty">${t("no_news")}</div>`;
+  }
+  const end = new Date(Math.ceil(Date.now() / 3600e3) * 3600e3), start = new Date(end - 3 * 86400e3);
+  getJson(`/v1/datasets/btc-news/data?start=${start.toISOString().slice(0, 13)}:00&end=${end.toISOString().slice(0, 13)}:00&fields=url,title,domain,language,tone,in_title`)
+    .then(({ data }) => {
+      // A mesma notícia pode aparecer em mais de um arquivo de 15 min: fica a primeira vez.
+      const seen = new Set();
+      items = data.sort((a, b) => (a.time < b.time ? -1 : 1)).filter((n) => !seen.has(n.url) && seen.add(n.url)).reverse();
+      render(false);
+    })
+    .catch(() => { document.getElementById("news").innerHTML = `<div class="empty">${t("load_error")}</div>`; });
+  document.querySelectorAll("[data-all]").forEach((b) => b.addEventListener("click", () => render(b.dataset.all === "1")));
+})();
+</script>

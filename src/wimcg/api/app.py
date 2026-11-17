@@ -1,23 +1,28 @@
-"""API pública de consulta. Só lê os arquivos JSON gerados pela coleta: não há banco.
+"""API pública de consulta e site. Só lê os arquivos JSON gerados pela coleta: não há banco.
 
 Depende apenas de fastapi + httpx (sem pandas), para caber em funções serverless gratuitas.
-O site do projeto vai morar neste mesmo aplicativo, como no Future Space.
+O site mora no mesmo aplicativo, como no Future Space: cada página é o miolo em web/pages,
+encaixado no molde web/base.html, com os textos de web/locales/<idioma>.json. Inglês é o idioma
+principal (endereços sem prefixo); português fica em /pt.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import threading
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from wimcg import __version__, catalog
 from wimcg.partitions import (
@@ -61,7 +66,76 @@ MAX_SPAN = {"day": timedelta(days=31), "month": timedelta(days=400), "year": tim
 DEFAULT_SPAN = {"day": timedelta(days=2), "month": timedelta(days=30), "year": timedelta(days=365)}
 # Únicos parâmetros de URL aceitos. Qualquer outro é recusado, o que impede furar o cache
 # da CDN com URLs sempre diferentes (?x=1, ?x=2...) sem custo para quem ataca.
-ALLOWED_QUERY_PARAMS = frozenset({"start", "end", "fields"})
+ALLOWED_QUERY_PARAMS = frozenset({"start", "end", "fields", "v"})
+
+# ---------------------------------------------------------------- site
+WEB = Path(__file__).parent / "web"
+STATIC = WEB / "static"
+# Versão de cada arquivo estático = início do hash do conteúdo. Vai no endereço (?v=...), então
+# qualquer mudança no arquivo muda o endereço e nenhum navegador fica com uma cópia antiga.
+STATIC_VERSIONS = {f.name: hashlib.sha256(f.read_bytes()).hexdigest()[:10] for f in STATIC.iterdir() if f.is_file()}
+LANGS = ("en", "pt")
+PAGE_URLS = {
+    "home": {"en": "/", "pt": "/pt"},
+    "forecasts": {"en": "/forecasts", "pt": "/pt/previsoes"},
+    "about": {"en": "/about", "pt": "/pt/sobre"},
+    "news": {"en": "/news", "pt": "/pt/noticias"},
+}
+SITE_URL = "https://where-is-my-crypto-going.vercel.app"
+LOCALES = {lang: json.loads((WEB / "locales" / f"{lang}.json").read_text(encoding="utf-8")) for lang in LANGS}
+# Imagens dos personagens: entram sozinhas quando o arquivo existir em web/static
+# (shiba.png no cabeçalho; bear.png e bull.png ao lado do gráfico).
+CHARACTERS = ("shiba", "bear", "bull")
+
+
+def _static_url(name: str) -> str:
+    return f"/static/{name}?v={STATIC_VERSIONS[name]}"
+
+
+def _assets() -> dict[str, str]:
+    return {c: _static_url(f"{c}.png") for c in CHARACTERS if f"{c}.png" in STATIC_VERSIONS}
+
+
+def _lookup(locale: dict, key: str) -> str:
+    value = locale
+    for part in key.split("."):
+        value = value[part]  # KeyError aqui = chave faltando no arquivo de tradução
+    return value
+
+
+def render_page(name: str, lang: str) -> str:
+    html = (WEB / "base.html").read_text(encoding="utf-8").replace("{{content}}", (WEB / "pages" / f"{name}.html").read_text(encoding="utf-8"))
+    locale = LOCALES[lang]
+    html = re.sub(r"\{\{t:([\w.]+)\}\}", lambda m: _lookup(locale, m.group(1)), html)
+    html = re.sub(r"\{\{url:(\w+)\}\}", lambda m: PAGE_URLS[m.group(1)][lang], html)
+    html = re.sub(r"\{\{static:([\w.-]+)\}\}", lambda m: _static_url(m.group(1)), html)
+    other = "pt" if lang == "en" else "en"
+    assets = _assets()
+    mascot = (
+        f'<img class="mascot" src="{assets["shiba"]}" alt="">'
+        if "shiba" in assets
+        else '<span class="coin" data-icon="coin" data-scale="5" aria-hidden="true"></span>'
+    )
+    hreflang = "\n".join(
+        f'<link rel="alternate" hreflang="{LOCALES[x]["lang"]}" href="{SITE_URL}{PAGE_URLS[name][x]}">' for x in LANGS
+    ) + f'\n<link rel="alternate" hreflang="x-default" href="{SITE_URL}{PAGE_URLS[name]["en"]}">'
+    replacements = {
+        "{{title}}": locale["titles"][name],
+        "{{page}}": name,
+        "{{lang}}": lang,
+        "{{hreflang_links}}": hreflang,
+        "{{lang_switch}}": f'<a class="btn" href="{PAGE_URLS[name][other]}" hreflang="{LOCALES[other]["lang"]}" lang="{LOCALES[other]["lang"]}" '
+        f'aria-label="{locale["nav"]["other_lang_label"]}">{locale["nav"]["other_lang"]}</a>',
+        "{{mascot}}": mascot,
+        "{{js_i18n}}": json.dumps(locale["js"], ensure_ascii=False).replace("</", "<\\/"),
+        "{{assets}}": json.dumps(assets),
+    }
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+    return html
+
+
+RENDERED_PAGES = {urls[lang]: render_page(name, lang) for name, urls in PAGE_URLS.items() for lang in LANGS}
 
 
 class CachedStorage(Storage):
@@ -195,8 +269,25 @@ def create_app(storage: Storage | None = None, rate_limit_per_minute: int | None
     def json_response(payload, seconds: int) -> JSONResponse:
         return JSONResponse(payload, headers=_cache_header(seconds))
 
-    @app.get("/", include_in_schema=False)
-    def root():
+    def page_route(html: str):
+        return lambda: HTMLResponse(html, headers=_cache_header(300))
+
+    for path, html in RENDERED_PAGES.items():
+        app.add_api_route(path, page_route(html), methods=["GET"], include_in_schema=False)
+
+    @app.get("/static/{name}", include_in_schema=False)
+    def static_file(name: str, v: str | None = None):
+        # Só arquivos que existem direto em web/static: nada de subpastas nem "..".
+        path = STATIC / name
+        if "/" in name or name.startswith(".") or name not in STATIC_VERSIONS:
+            raise HTTPException(404, "arquivo não encontrado")
+        media = {".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".svg": "image/svg+xml", ".json": "application/json"}
+        # Com a versão certa no endereço, o conteúdo nunca muda: pode ficar em cache para sempre.
+        cache = {"Cache-Control": "public, max-age=31536000, immutable"} if v == STATIC_VERSIONS[name] else _cache_header(60)
+        return Response(path.read_bytes(), media_type=media.get(path.suffix, "application/octet-stream"), headers=cache)
+
+    @app.get("/v1", include_in_schema=False)
+    def info():
         return json_response({"name": "Where Is My Crypto Going?", "version": __version__, "disclaimer": DISCLAIMER, "docs": "/docs", "datasets": "/v1/datasets"}, 3600)
 
     @app.get("/v1/datasets", summary="Tabelas e cobertura de cada uma")

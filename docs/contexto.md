@@ -283,6 +283,18 @@ Plano:
     em PNG com fundo transparente. Desenho feito por código não serve: o autor não gosta do
     resultado. Neve e fumaça podem ser feitas por código.
 - **Onde ficam os dados:** tudo no dataset do Hugging Face. A Vercel só hospeda o site e a API.
+- **Design (aprovado em 17/11/2026):** pixel art, para fugir do visual genérico de IA. Modo
+  claro com a paleta Inverno (gelo e laranja), modo escuro com a Fósforo (monitor âmbar, com
+  linhas de varredura); o site segue o tema do aparelho e tem um botão para trocar. Fontes
+  Pixelify Sans (títulos e texto), VT323 (números) e Silkscreen (rótulos). Sem cantos
+  arredondados, bordas de 3 px com cantos cortados, sombra dura, espaçamento em múltiplos de 4 px;
+  alta e baixa sempre com seta ou palavra, nunca só pela cor. Gráfico desenhado em 240 x 80 pontos
+  e ampliado sem suavizar; neve e poeira da cena feitas por código, personagens só por imagem.
+- **Site no ar (17/11/2026):** quatro páginas em inglês (`/`) e português (`/pt`): início (gráfico
+  com o valor exato ao apontar ou tocar, estado do mercado, cena do regime, previsões), previsões
+  (placar contra as referências, cada previsão conferida, teste no passado), notícias (só veículos
+  grandes, filtro "sobre bitcoin") e sobre o modelo. Falta: as imagens dos personagens e a linha
+  do tempo dos grandes movimentos.
 - **O que o site lê:** `json/btc-usd-1h/<mês>.json` (gráfico), `json/market-state/latest.json`
   (volatilidade e regime agora), `json/btc-news/<dia>.json` (notícias; filtrar por `in_title`,
   porque o tema `ECON_BITCOIN` do GDELT também marca notícias que só citam bitcoin de passagem:

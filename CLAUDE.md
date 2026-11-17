@@ -67,8 +67,13 @@ ruff check src tests && pytest -q
 - `src/wimcg/moves.py`: detecção dos grandes movimentos.
 - `src/wimcg/market.py`: velas de 1 hora e estado do mercado (volatilidade, regime, queda desde o pico).
 - `src/wimcg/card.py`: página do dataset no Hugging Face, gerada do catálogo.
-- `src/wimcg/api/app.py`: API de leitura (FastAPI, sem pandas). Na Vercel entra por `api/index.py`
-  e `vercel.json`, com as dependências de `requirements.txt`. O site vai morar no mesmo aplicativo.
+- `src/wimcg/api/app.py`: API de leitura e site (FastAPI, sem pandas). Na Vercel entra por
+  `api/index.py` e `vercel.json`, com as dependências de `requirements.txt`.
+- `src/wimcg/api/web/`: o site, em pixel art (claro = paleta Inverno, escuro = Fósforo):
+  - `base.html` (molde com aviso, cabeçalho, abas e rodapé) e `pages/` (home, forecasts, about, news);
+  - `locales/en.json` e `pt.json`: todos os textos; inglês em `/`, português em `/pt`;
+  - `static/pixel.css` e `pixel.js`: estilos, tema, gráfico em pixel, cena do personagem, ícones;
+  - imagens dos personagens: `static/shiba.png`, `bear.png` e `bull.png` entram sozinhas quando existirem.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
 - `src/wimcg/ml/`: pesquisa do modelo de direção (roda localmente, não no Actions):
   - `features.py`: tabela por hora, com as variáveis em grupos e sem informação do futuro
