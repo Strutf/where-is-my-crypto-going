@@ -114,17 +114,21 @@
     const head = `<tr><th>${t("issued")}</th><th>${t("horizon")}</th><th>${t("said")}</th><th class="r">${t("up_chance")}</th><th>${t("happened")}</th><th>${t("result")}</th><th class="r">${t("swing_pred_obs")}</th></tr>`;
     const body = rows.map((r) => {
       const said = `<span class="res ${r.direction}">${icon(r.direction, 2)} ${t(r.direction)}</span>`;
-      const obs = `<span class="res ${r.observed_direction}">${icon(r.observed_direction, 2)} ${fmtPct(r.observed_return_pct)}</span>`;
-      const res = r.hit ? `<span class="res up">${icon("check", 2)} ${t("hit")}</span>` : `<span class="res down">${icon("cross", 2)} ${t("miss")}</span>`;
+      // Previsão ainda sem resultado: aparece já, marcada como aguardando.
+      const obs = r.pending ? `<span class="wait">${t("result_at")} ${fmtTime(r.target_time)}</span>`
+        : `<span class="res ${r.observed_direction}">${icon(r.observed_direction, 2)} ${fmtPct(r.observed_return_pct)}</span>`;
+      const res = r.pending ? `<span class="res wait">${icon("clock", 2)} ${t("waiting")}</span>`
+        : r.hit ? `<span class="res up">${icon("check", 2)} ${t("hit")}</span>` : `<span class="res down">${icon("cross", 2)} ${t("miss")}</span>`;
+      const swing = `${r.pred_volatility_pct.toFixed(2)}% / ${r.pending ? "—" : r.observed_volatility_pct.toFixed(2) + "%"}`;
       return `<tr><td>${fmtTime(r.time)}</td><td>${r.horizon_hours} h</td><td>${said}</td><td class="r">${pct(r.prob_up)}</td><td>${obs}</td><td>${res}</td>
-        <td class="r">${r.pred_volatility_pct.toFixed(2)}% / ${r.observed_volatility_pct.toFixed(2)}%</td></tr>`;
+        <td class="r">${swing}</td></tr>`;
     }).join("");
     document.getElementById("log").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
   }
   // Previsto contra real: barras = o que aconteceu; marcadores = o modelo e a referência.
   const plot = new WIMCG.ForecastPlot(document.getElementById("plot"));
   const plotMsg = document.getElementById("plot-msg");
-  let all = [], view = "ret", ch = 1;
+  let all = [], pending = [], view = "ret", ch = 1;
   const DAY7 = 7 * 86400e3;
   const swatch = (color, kind) => `<span class="sw ${kind}" style="--c:var(--${color})"></span>`;
   function renderPlot() {
@@ -132,29 +136,34 @@
     document.querySelectorAll("[data-ch]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.ch === String(ch)));
     document.getElementById("cmp-note").textContent = t("cmp_note_" + view);
     const cutoff = new Date(Date.now() - DAY7).toISOString();
+    // Retorno e oscilação: as conferidas dos últimos 7 dias e, no fim, as que ainda aguardam
+    // resultado (só o traço do previsto). Acerto: só as conferidas, desde o início.
     let rows = all.filter((r) => r.horizon_hours === ch);
-    if (view !== "acc") rows = rows.filter((r) => r.time >= cutoff);
+    if (view !== "acc") rows = rows.filter((r) => r.time >= cutoff).concat(pending.filter((r) => r.horizon_hours === ch)).sort((a, b) => (a.time < b.time ? -1 : 1));
     if (!rows.length) { plotMsg.hidden = false; plotMsg.textContent = t("nothing_checked"); return; }
     plotMsg.hidden = true;
     const times = rows.map((r) => r.time);
     const legend = document.getElementById("legend");
+    const waitTip = (r) => `<br><span class="wait">${t("waiting_until").replace("{time}", fmtTime(r.target_time))}</span>`;
+    const waitLegend = rows.some((r) => r.pending) ? `<span>${swatch("muted", "wait")} ${t("legend_waiting")}</span>` : "";
     if (view === "ret") {
       plot.set({
-        n: rows.length, times, zero: true, fmt: (v) => fmtPct(v),
-        bars: rows.map((r) => ({ v: r.observed_return_pct, color: r.observed_return_pct > 0 ? "up" : "down" })),
+        n: rows.length, times, zero: true, fmt: (v) => fmtPct(v), pending: rows.map((r) => !!r.pending),
+        bars: rows.map((r) => (r.pending ? null : { v: r.observed_return_pct, color: r.observed_return_pct > 0 ? "up" : "down" })),
         marks: rows.map((r) => [{ v: r.pred_return_pct, color: "ink" }]),
-        tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("model_return")}: ${fmtPct(r.pred_return_pct)}<br>${t("real_return")}: ${fmtPct(r.observed_return_pct)}<br>${t("miss_by")}: ${Math.abs(r.pred_return_pct - r.observed_return_pct).toFixed(2)} pp<br>${t("said")}: ${t(r.direction)} · ${r.hit ? t("hit") : t("miss")}`; },
+        tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("said")}: ${t(r.direction)} (${pct(r.prob_up)})<br>${t("model_return")}: ${fmtPct(r.pred_return_pct)}` + (r.pending ? waitTip(r) : `<br>${t("real_return")}: ${fmtPct(r.observed_return_pct)}<br>${t("miss_by")}: ${Math.abs(r.pred_return_pct - r.observed_return_pct).toFixed(2)} pp · ${r.hit ? t("hit") : t("miss")}`); },
       });
-      legend.innerHTML = `<span>${swatch("up", "bar")}${swatch("down", "bar")} ${t("legend_real_return")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span>`;
+      legend.innerHTML = `<span>${swatch("up", "bar")}${swatch("down", "bar")} ${t("legend_real_return")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span>${waitLegend}`;
     } else if (view === "vol") {
       plot.set({
-        n: rows.length, times, zero: true, fmt: (v) => v.toFixed(2) + "%",
-        bars: rows.map((r) => ({ v: r.observed_volatility_pct, color: "frost" })),
+        n: rows.length, times, zero: true, fmt: (v) => v.toFixed(2) + "%", pending: rows.map((r) => !!r.pending),
+        bars: rows.map((r) => (r.pending ? null : { v: r.observed_volatility_pct, color: "frost" })),
         marks: rows.map((r) => [{ v: r.persistence_volatility_pct, color: "muted", muted: true }, { v: r.pred_volatility_pct, color: "ink" }]),
-        tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("real_swing")}: ${r.observed_volatility_pct.toFixed(2)}%<br>${t("model_swing")}: ${r.pred_volatility_pct.toFixed(2)}% (${t("miss_by")} ${Math.abs(r.pred_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp)<br>${t("repeat_swing")}: ${r.persistence_volatility_pct.toFixed(2)}% (${t("miss_by")} ${Math.abs(r.persistence_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp)`; },
+        tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("model_swing")}: ${r.pred_volatility_pct.toFixed(2)}%<br>${t("repeat_swing")}: ${r.persistence_volatility_pct.toFixed(2)}%` + (r.pending ? waitTip(r) : `<br>${t("real_swing")}: ${r.observed_volatility_pct.toFixed(2)}%<br>${t("miss_by")}: ${Math.abs(r.pred_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp (${t("repeat_swing").toLowerCase()}: ${Math.abs(r.persistence_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp)`); },
       });
-      legend.innerHTML = `<span>${swatch("frost", "bar")} ${t("legend_real_swing")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span><span>${swatch("muted", "dash2")} ${t("legend_repeat")}</span>`;
+      legend.innerHTML = `<span>${swatch("frost", "bar")} ${t("legend_real_swing")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span><span>${swatch("muted", "dash2")} ${t("legend_repeat")}</span>${waitLegend}`;
     } else {
+      if (!rows.length) { plotMsg.hidden = false; plotMsg.textContent = t("nothing_checked"); return; }
       // Acerto acumulado desde o início, do modelo e das duas regras sem modelo.
       const cum = (key) => { let k = 0; return rows.map((r, i) => (k += r[key] ? 1 : 0, (k / (i + 1)) * 100)); };
       const lines = [{ values: cum("always_up_hit"), color: "frost", width: 2 }, { values: cum("reversal_hit"), color: "muted", width: 2, dashed: true }, { values: cum("hit"), color: "accent", width: 3 }];
@@ -168,13 +177,20 @@
   document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; renderPlot(); }));
   document.querySelectorAll("[data-ch]").forEach((b) => b.addEventListener("click", () => { ch = Number(b.dataset.ch); renderPlot(); }));
 
-  // Uma leitura só, de até 90 dias: alimenta o gráfico, o acerto acumulado e a tabela (7 dias).
-  const end = new Date(Math.ceil(Date.now() / 3600e3) * 3600e3), start = new Date(end - 90 * 86400e3);
-  getJson(`/v1/datasets/verification/data?start=${start.toISOString().slice(0, 13)}:00&end=${end.toISOString().slice(0, 13)}:00`)
-    .then(({ data }) => {
-      all = data.sort((a, b) => (a.time < b.time ? -1 : 1));
+  // Conferidas de até 90 dias (gráfico, acerto acumulado e tabela) e previsões dos últimos 7 dias,
+  // para mostrar já as que ainda aguardam resultado.
+  const end = new Date(Math.ceil(Date.now() / 3600e3) * 3600e3);
+  const iso = (d) => d.toISOString().slice(0, 13) + ":00";
+  Promise.all([
+    getJson(`/v1/datasets/verification/data?start=${iso(new Date(end - 90 * 86400e3))}&end=${iso(end)}`),
+    getJson(`/v1/datasets/predictions/data?start=${iso(new Date(end - DAY7))}&end=${iso(end)}`).catch(() => ({ data: [] })),
+  ])
+    .then(([ver, pred]) => {
+      all = ver.data.sort((a, b) => (a.time < b.time ? -1 : 1));
+      const done = new Set(all.map((r) => r.time + "|" + r.horizon_hours));
+      pending = pred.data.filter((r) => !done.has(r.time + "|" + r.horizon_hours)).map((r) => ({ ...r, pending: true }));
       const cutoff = new Date(Date.now() - DAY7).toISOString();
-      log = all.filter((r) => r.time >= cutoff).reverse();
+      log = all.filter((r) => r.time >= cutoff).concat(pending).sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : a.horizon_hours - b.horizon_hours));
       renderLog(0); renderPlot();
     })
     .catch(() => {

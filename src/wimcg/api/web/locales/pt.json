@@ -163,8 +163,8 @@
     "no_news": "Nenhuma notícia neste período",
     "theme_light": "Mudar para claro",
     "theme_dark": "Mudar para escuro",
-    "cmp_note_ret": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente se mexeu; a cruz é o movimento que o modelo esperava. Os movimentos esperados pelo modelo ficam perto de zero: ele raramente aposta em movimentos grandes.",
-    "cmp_note_vol": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente oscilou; a cruz é a previsão do modelo, e o quadrado, a regra simples de repetir a última oscilação. Quanto mais perto do topo da barra, menor o erro.",
+    "cmp_note_ret": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente se mexeu; o traço é o movimento que o modelo esperava. As colunas pontilhadas no fim são previsões que ainda aguardam o resultado. Os movimentos esperados pelo modelo ficam perto de zero: ele raramente aposta em movimentos grandes.",
+    "cmp_note_vol": "Cada coluna é uma previsão dos últimos 7 dias. A barra é o quanto o preço realmente oscilou; o traço escuro é a previsão do modelo, e o traço claro partido, a regra simples de repetir a última oscilação. Quanto mais perto o traço estiver do topo da barra, menor o erro. As colunas pontilhadas no fim ainda aguardam o resultado.",
     "cmp_note_acc": "Parte das direções certas desde o início, previsão após previsão, do modelo e das duas regras sem modelo. Com poucas previsões, as linhas oscilam bastante.",
     "model_return": "O modelo esperava",
     "real_return": "Movimento real",
@@ -177,6 +177,9 @@
     "legend_model": "modelo",
     "legend_real_swing": "oscilação real",
     "legend_repeat": "repetir a última",
-    "coin_flip": "cara ou coroa"
+    "coin_flip": "cara ou coroa",
+    "waiting": "Aguardando",
+    "legend_waiting": "aguardando o resultado",
+    "waiting_until": "Resultado às {time} UTC"
   }
 }

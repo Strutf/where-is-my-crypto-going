@@ -163,8 +163,8 @@
     "no_news": "No news in this period",
     "theme_light": "Switch to light",
     "theme_dark": "Switch to dark",
-    "cmp_note_ret": "Each column is one forecast from the last 7 days. The bar is how much the price really moved; the cross is the move the model expected. The model's expected moves sit close to zero: it rarely calls big moves.",
-    "cmp_note_vol": "Each column is one forecast from the last 7 days. The bar is how much the price really swung; the cross is the model's forecast and the square is the simple rule of repeating the last swing. The closer the marker is to the top of the bar, the smaller the miss.",
+    "cmp_note_ret": "Each column is one forecast from the last 7 days. The bar is how much the price really moved; the dash is the move the model expected. Dotted columns at the end are forecasts still waiting for their result. The model's expected moves sit close to zero: it rarely calls big moves.",
+    "cmp_note_vol": "Each column is one forecast from the last 7 days. The bar is how much the price really swung; the dark dash is the model's forecast and the light broken dash is the simple rule of repeating the last swing. The closer a dash is to the top of the bar, the smaller the miss. Dotted columns at the end are still waiting for their result.",
     "cmp_note_acc": "Share of right directions since launch, forecast after forecast, for the model and for the two rules that need no model. With few forecasts the lines jump around a lot.",
     "model_return": "Model expected",
     "real_return": "Real move",
@@ -177,6 +177,9 @@
     "legend_model": "model",
     "legend_real_swing": "real swing",
     "legend_repeat": "repeat last swing",
-    "coin_flip": "a coin flip"
+    "coin_flip": "a coin flip",
+    "waiting": "Waiting",
+    "legend_waiting": "waiting for the result",
+    "waiting_until": "Result at {time} UTC"
   }
 }

@@ -222,6 +222,13 @@
         ctx.globalAlpha = 1;
       }
       const bw = Math.max(2, Math.min(26, Math.floor(this.slot * 0.6)));
+      // Coluna de previsão ainda sem resultado: pontilhada, no lugar onde a barra vai entrar.
+      (s.pending || []).forEach((on, i) => {
+        if (!on) return;
+        ctx.fillStyle = tok("muted");
+        const x0 = this.X(i) - Math.floor(bw / 2);
+        for (let y = m.t; y < m.t + this.ph; y += 4) for (let x = x0; x < x0 + bw; x += 4) ctx.fillRect(x, y, 1, 1);
+      });
       (s.bars || []).forEach((b, i) => {
         if (!b) return;
         const y0 = this.Y(s.zero ? 0 : this.lo), y1 = this.Y(b.v);

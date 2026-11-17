@@ -152,6 +152,7 @@ td.r, th.r { text-align: right; }
 .legend .sw.dash { width: 20px; height: 4px; }
 .legend .sw.dash2 { width: 20px; height: 3px; background: linear-gradient(90deg, var(--c) 0 8px, transparent 8px 12px, var(--c) 12px); }
 .legend .sw.line { width: 22px; height: 3px; }
+.legend .sw.wait { width: 12px; height: 14px; background: radial-gradient(var(--c) 1px, transparent 1.5px) 0 0 / 4px 4px; box-shadow: 0 0 0 1px var(--c); }
 .legend .sw.dline { width: 22px; height: 2px; background: repeating-linear-gradient(90deg, var(--c) 0 6px, transparent 6px 10px); }
 .plot { position: relative; padding: 12px; }
 .plot canvas { display: block; width: 100%; height: 260px; touch-action: pan-y; cursor: crosshair; }
