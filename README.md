@@ -69,7 +69,7 @@ flowchart LR
 |---|---|---|
 | **1. Dados e grandes movimentos** | coleta do preço (1 min) e do Fear & Greed; detecção dos grandes movimentos; notícias de antes, durante e depois de cada um | **implementada** |
 | 2. Mais variáveis | notícias e clima global ao vivo pelos arquivos brutos do GDELT; derivativos (financiamento, contratos em aberto); blockchain (mempool.space); macro (FRED) | planejada |
-| 3. Modelo de direção | probabilidade de alta em 1 h, 4 h e 24 h, e retorno previsto; avaliação contra as referências | planejada |
+| 3. Modelo de direção | probabilidade de alta em 1 h, 4 h e 24 h, e retorno previsto; avaliação contra as referências | **primeira comparação feita** (ver abaixo) |
 | 4. API e site | previsões ao vivo, linha do tempo "o que moveu o Bitcoin", verificação pública | planejada |
 
 ## Fontes de dados (fase 1)
@@ -156,10 +156,38 @@ também trazem os temas de todas as notícias do mundo, como conflito armado, de
 e acordos de paz. Isso permite medir o "clima global" a cada 15 minutos como variável do
 modelo.
 
-### Avaliação planejada (fase 3)
+### Primeira comparação de modelos (fase 3)
 
-- **Direção:** acerto, contra 50% e contra "repetir a última direção"; Brier e diagrama de
-  confiabilidade para a probabilidade.
+Três famílias de modelos, avaliadas mês a mês de jan/2019 a out/2026, cada uma treinada só com os
+3 anos anteriores ao mês testado: gradient boosting, uma rede neural densa e uma rede recorrente
+que lê as últimas 168 horas. Cada uma com quatro conjuntos de variáveis: só preço; + estado do
+mercado; + Fear & Greed; + notícias. Números completos, com intervalos de confiança, em
+[`research/results/direction_eval.md`](research/results/direction_eval.md).
+
+- **1 h:** todos os modelos de preço acertam ~54%, contra 50,7% de "sempre alta". Mas uma regra
+  trivial, dizer o contrário da última hora, já acerta 53,1%: os modelos ganham só ~1 ponto dela.
+  O ganho cai com o tempo (55% em 2019-2020, 52,4% em 2025-2026), e o retorno médio na direção
+  prevista é de 0,8 pb por hora antes de custos, negativo em 2025-2026, muito abaixo de qualquer
+  taxa de negociação. A reversão de curto prazo é real, mas pequena e sumindo.
+- **4 h:** ~53,7% contra 51,1% de "sempre alta", mas igual à regra de inverter (53,2%); a
+  probabilidade não é melhor que a taxa de alta da janela de treino.
+- **24 h:** nenhum modelo supera "sempre alta" (52,2%). As probabilidades são piores que a taxa de
+  alta da janela de treino (Brier skill de −2% a −17%): os modelos se ajustam a padrões que não
+  se repetem no mês seguinte.
+- **Grupos de variáveis:** estado do mercado, Fear & Greed e notícias não acrescentam nada ao
+  gradient boosting. Nas redes neurais, pioram: mais variáveis, mais ajuste ao ruído (a rede
+  simples cai de 54,1% para 52,5% em 1 h com as notícias).
+- **Redes neurais:** não superam o gradient boosting. A rede de sequência, que lê as últimas 168
+  horas, empata com a rede simples sobre as mesmas variáveis: ler a sequência não acrescentou nada.
+
+**Conclusão:** não há sinal de direção aproveitável nestes dados e horizontes. É o resultado
+esperado para um mercado líquido e fica publicado assim. Para reproduzir:
+`pip install -e ".[ml]" && wimcg ml-data && wimcg ml-eval && wimcg ml-report`.
+
+### Avaliação (fase 3)
+
+- **Direção:** acerto, contra 50%, contra "sempre alta" e contra "inverter a última direção";
+  Brier e diagrama de confiabilidade para a probabilidade.
 - **Tamanho:** MAE do retorno, contra o passeio aleatório (retorno zero) e contra a média
   histórica.
 - **Volatilidade:** contra o GARCH, o modelo clássico.

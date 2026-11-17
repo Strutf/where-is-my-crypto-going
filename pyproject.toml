@@ -22,6 +22,12 @@ pipeline = [
 hf = ["huggingface_hub>=0.25"]
 s3 = ["boto3>=1.34"]
 api = ["uvicorn>=0.30"]
+# Pesquisa do modelo, rodada localmente: gradient boosting (scikit-learn) e redes neurais (PyTorch).
+ml = [
+    "where-is-my-crypto-going[pipeline]",
+    "scikit-learn>=1.5",
+    "torch>=2.5",
+]
 dev = [
     "where-is-my-crypto-going[pipeline,api]",
     "pytest>=8",

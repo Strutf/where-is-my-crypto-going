@@ -1,4 +1,4 @@
-"""Linha de comando: `wimcg update | backfill | derive | moves | news | gkg-sql | gkg-pack | gkg-import | datasets`."""
+"""Linha de comando: `wimcg update | backfill | derive | moves | news | gkg-sql | gkg-pack | gkg-import | ml-data | ml-eval | ml-report | datasets`."""
 
 from __future__ import annotations
 
@@ -328,6 +328,36 @@ def cmd_gkg_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ml_data(args: argparse.Namespace) -> int:
+    """Baixa do Hugging Face as tabelas de treino e monta a tabela por hora."""
+    from wimcg.ml import data, run
+
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    revision = data.download()
+    table, groups = run.build_table()
+    log.info("dataset %s: %d horas, %s", revision[:10], len(table), ", ".join(f"{k} {len(v)}" for k, v in groups.items()))
+    return 0
+
+
+def cmd_ml_eval(args: argparse.Namespace) -> int:
+    """Avaliação andando para a frente de cada modelo e conjunto de variáveis."""
+    from wimcg.ml import run
+
+    if not run.TABLE.exists():
+        _error("sem tabela de treino: rode `wimcg ml-data` antes")
+        return 1
+    run.run(args.models.split(","), args.sets.split(","), args.seeds, args.first, args.last or run.last_full_month(), args.jobs, redo=args.redo)
+    return 0
+
+
+def cmd_ml_report(args: argparse.Namespace) -> int:
+    from wimcg.ml import run
+
+    run.report()
+    print((run.RESULTS / "direction_eval.md").read_text())
+    return 0
+
+
 def cmd_datasets(args: argparse.Namespace) -> int:
     for ds in catalog.DATASETS:
         print(f"{ds.id:<14} {ds.cadence:<8} {ds.provider}")
@@ -379,6 +409,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", nargs="?", default="history/gkg-hourly.parquet")
     p.set_defaults(func=cmd_gkg_import)
 
+    p = sub.add_parser("ml-data", help="baixa as tabelas de treino do Hugging Face e monta a tabela por hora")
+    p.set_defaults(func=cmd_ml_data)
+
+    p = sub.add_parser("ml-eval", help="avalia os modelos mês a mês (gb, mlp, gru) e guarda as previsões")
+    p.add_argument("--models", default="gb,mlp,gru")
+    p.add_argument("--sets", default="price,market,sentiment,all", help="conjuntos de variáveis: price, market, sentiment, all")
+    p.add_argument("--seeds", type=int, default=3, help="sementes por rede neural (o gb roda uma vez)")
+    p.add_argument("--first", default="2019-01-01", help="primeiro mês de teste")
+    p.add_argument("--last", help="último mês de teste (padrão: o último mês completo)")
+    p.add_argument("--jobs", type=int, default=4, help="rodadas em paralelo, com 1 núcleo cada")
+    p.add_argument("--redo", action="store_true", help="refaz as rodadas que já têm previsões guardadas")
+    p.set_defaults(func=cmd_ml_eval)
+
+    p = sub.add_parser("ml-report", help="resume as previsões guardadas em research/results/")
+    p.set_defaults(func=cmd_ml_report)
+
     p = sub.add_parser("datasets", help="lista os datasets do catálogo")
     p.set_defaults(func=cmd_datasets)
 
@@ -387,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    for noisy in ("httpx", "huggingface_hub"):
+    for noisy in ("httpx", "httpx2", "huggingface_hub"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     return args.func(args)

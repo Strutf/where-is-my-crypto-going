@@ -48,6 +48,10 @@ wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arq
 wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
 wimcg gkg-import                              # grava o histórico no armazenamento
 uvicorn wimcg.api.app:app --reload            # API local, lendo ./data
+pip install -e ".[ml]"                        # scikit-learn e PyTorch, só para a pesquisa do modelo
+wimcg ml-data                                 # baixa as tabelas do Hugging Face e monta a tabela por hora
+wimcg ml-eval                                 # avaliação mês a mês de gb, mlp e gru (previsões em data/ml/)
+wimcg ml-report                               # resumo em research/results/direction_eval.{json,md}
 ruff check src tests && pytest -q
 ```
 
@@ -64,6 +68,12 @@ ruff check src tests && pytest -q
 - `src/wimcg/api/app.py`: API de leitura (FastAPI, sem pandas). Na Vercel entra por `api/index.py`
   e `vercel.json`, com as dependências de `requirements.txt`. O site vai morar no mesmo aplicativo.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
+- `src/wimcg/ml/`: pesquisa do modelo de direção (roda localmente, não no Actions):
+  - `features.py`: tabela por hora, com as variáveis em grupos e sem informação do futuro
+    (testes em `tests/test_ml.py`);
+  - `models.py`: gradient boosting, rede densa e rede recorrente, com a mesma interface;
+  - `evaluate.py`: avaliação andando para a frente, medidas e intervalos de confiança;
+  - `run.py`: rodadas em paralelo e relatório.
 - `src/wimcg/outlets.py`: lista dos veículos grandes aceitos nas tabelas que guardam endereços de notícias.
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
   Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min e alimenta `gkg-hourly`

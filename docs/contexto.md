@@ -127,6 +127,39 @@ Tabelas baixadas do dataset e conferidas depois da carga histórica:
   Não afeta o treino; para a linha do tempo do site, rodar também localmente, com paciência.
 - **Coleta:** 51 execuções seguidas sem falha desde o fim da carga, cerca de 1 min cada.
 
+### Primeira comparação de modelos (17/11/2026)
+
+`wimcg ml-data && wimcg ml-eval && wimcg ml-report`, com o dataset na revisão `ff2a4e24d7`.
+Números completos em `research/results/direction_eval.md`. Teste mês a mês de jan/2019 a
+out/2026, treino nos 3 anos anteriores; três famílias de modelos (gradient boosting, rede densa,
+rede recorrente) com quatro conjuntos cumulativos de variáveis; redes com 3 sementes.
+
+- **1 h:** todos os modelos de preço acertam ~54%, contra 50,7% de "sempre alta". Mas uma regra
+  trivial, dizer o contrário da última hora, já acerta 53,1%: os modelos ganham só ~1 ponto dela.
+  O ganho cai com o tempo (55% em 2019-2020, 52,4% em 2025-2026), e o retorno médio na direção
+  prevista é de 0,8 pb por hora antes de custos, negativo em 2025-2026, muito abaixo de qualquer
+  taxa de negociação. A reversão de curto prazo é real, mas pequena e sumindo.
+- **4 h:** ~53,7% contra 51,1% de "sempre alta", mas igual à regra de inverter (53,2%); a
+  probabilidade não é melhor que a taxa de alta da janela de treino.
+- **24 h:** nenhum modelo supera "sempre alta" (52,2%). As probabilidades são piores que a taxa de
+  alta da janela de treino (Brier skill de −2% a −17%): os modelos se ajustam a padrões que não
+  se repetem no mês seguinte.
+- **Grupos de variáveis:** estado do mercado, Fear & Greed e notícias não acrescentam nada ao
+  gradient boosting. Nas redes neurais, pioram: mais variáveis, mais ajuste ao ruído (a rede
+  simples cai de 54,1% para 52,5% em 1 h com as notícias).
+- **Redes neurais:** não superam o gradient boosting. A rede de sequência, que lê as últimas 168
+  horas, empata com a rede simples sobre as mesmas variáveis: ler a sequência não acrescentou nada.
+
+**Leitura honesta:** não há sinal de direção aproveitável nestes dados e horizontes. O resultado
+confirma a expectativa registrada em "Sobre a IA" e é publicável assim. Antes de qualquer
+previsão ir ao site, ela precisa superar a regra de inverter, não só 50%.
+
+Lições do processo:
+- a regra de inverter só entrou como referência depois do primeiro relatório; sem ela, os 54%
+  pareceriam ganho do modelo;
+- rodadas em paralelo precisam de 1 núcleo cada: com mais, elas disputaram o processador e não
+  terminaram (gb: 3,4 s por mês sozinho, mais de 35 min sem terminar em paralelo).
+
 ### Primeiros números locais (14 meses, out/2025 a nov/2026)
 
 - **Escala de 1 h:** 182 grandes movimentos (81 de alta, 101 de baixa).
@@ -247,9 +280,9 @@ Plano:
 
 ## Próximos passos
 
-1. **Fase 3, linha de base:** tabela de treino por hora e modelo de direção só com preço e Fear
-   & Greed, com avaliação completa. Depois, o ganho das notícias sobre a linha de base, e a
-   comparação com redes neurais nas mesmas divisões (ver "Sobre a IA").
+1. **Decidir o rumo da fase 3** com o autor, à luz da primeira comparação: o que testar a seguir
+   (outras variáveis, como derivativos e dados da blockchain; volatilidade em vez de direção,
+   que é mais previsível; movimentos grandes à parte) e o que o site mostra nas previsões.
 2. Notícias dos grandes movimentos (`move-news`) também localmente, para a linha do tempo do site.
 3. Confirmar que o visualizador do Hugging Face voltou depois da reimportação do histórico de
    notícias (17/11/2026, todas as partições de `gkg-hourly` com as mesmas colunas).
