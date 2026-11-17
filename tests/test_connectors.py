@@ -1,9 +1,12 @@
+import io
 import json
-from datetime import UTC, datetime
+import zipfile
+from datetime import UTC, datetime, timedelta
 
 import httpx
+import pandas as pd
 
-from wimcg.pipeline.connectors import coinbase, feargreed
+from wimcg.pipeline.connectors import coinbase, feargreed, gdelt_gkg
 from wimcg.pipeline.http import make_client
 
 
@@ -34,3 +37,67 @@ def test_fear_greed_parses_and_filters_by_date():
     with make_client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=json.dumps(data)))) as c:
         df = feargreed.fear_greed(c, datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 12, 31, tzinfo=UTC))
     assert df[["value", "classification"]].values.tolist() == [["10", "Extreme Fear"]]
+
+
+def _gkg_zip(stamp: str, themes: list[str]) -> bytes:
+    """Arquivo .gkg.csv.zip com uma linha por tema e um pedaço solto (quebra de linha no último campo)."""
+    lines = []
+    for i, theme in enumerate(themes):
+        fields = [""] * gdelt_gkg.N_FIELDS
+        fields[0], fields[gdelt_gkg.DATE], fields[gdelt_gkg.THEMES], fields[gdelt_gkg.TONE] = f"{stamp}-{i}", stamp, theme, "-2,1,3"
+        lines.append("\t".join(fields))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr(f"{stamp}.gkg.csv", "\n".join(lines) + "\npedaço solto de uma notícia\n")
+    return buf.getvalue()
+
+
+def _gdelt(last_en: str, last_tr: str, missing: tuple[str, ...] = ()):
+    """Servidor falso do GDELT: as listas do último arquivo e um arquivo por pedido."""
+    requested = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        requested.append(name)
+        if name == "lastupdate.txt":
+            return httpx.Response(200, text=f"1 abc http://data.gdeltproject.org/gdeltv2/{last_en}.gkg.csv.zip\n")
+        if name == "lastupdate-translation.txt":
+            return httpx.Response(200, text=f"1 abc http://data.gdeltproject.org/gdeltv2/{last_tr}.translation.gkg.csv.zip\n")
+        if name in missing:
+            return httpx.Response(404)
+        return httpx.Response(200, content=_gkg_zip(name[:14], ["ECON_BITCOIN;CYBER_ATTACK;", "TERROR;"]))
+
+    return handler, requested
+
+
+def test_gkg_hourly_aggregates_only_closed_hours():
+    # Último arquivo publicado: 11:45 em inglês e 11:30 nas traduções. Só a hora das 10 fechou.
+    handler, requested = _gdelt("20260205114500", "20260205113000")
+    start, end = datetime(2026, 2, 5, 9, 0, 1, tzinfo=UTC), datetime(2026, 2, 5, 12, 7, tzinfo=UTC)
+    with make_client(transport=httpx.MockTransport(handler)) as client:
+        df = gdelt_gkg.gkg_hourly(client, start, end)
+    assert df["time"].tolist() == [pd.Timestamp("2026-02-05T10:00Z")]  # a das 9 já estava gravada
+    row = df.iloc[0]
+    assert (row["articles"], row["btc_articles"], row["btc_cyber_articles"], row["world_terror_articles"]) == (16, 8, 8, 8)
+    assert (row["en_files"], row["translated_files"], row["tone"]) == (4, 4, -2.0)
+    assert len(requested) == 2 + 8  # as duas listas e os 8 arquivos da hora das 10
+
+
+def test_gkg_hourly_marks_files_gdelt_never_published():
+    handler, _ = _gdelt("20260205120000", "20260205120000", missing=("20260205103000.translation.gkg.csv.zip",))
+    with make_client(transport=httpx.MockTransport(handler)) as client:
+        df = gdelt_gkg.gkg_hourly(client, datetime(2026, 2, 5, 10, tzinfo=UTC), datetime(2026, 2, 5, 11, 30, tzinfo=UTC))
+    row = df.iloc[0]
+    assert (row["articles"], row["en_files"], row["translated_files"]) == (14, 4, 3)
+
+
+def test_gkg_hourly_stops_waiting_for_late_translations():
+    # As traduções pararam às 09:45. A hora das 10 só é gravada sem elas depois de PATIENCE.
+    handler, _ = _gdelt("20260205140000", "20260205094500", missing=tuple(f"202602051{h}{m}00.translation.gkg.csv.zip" for h in "0123" for m in ("00", "15", "30", "45")))
+    start = datetime(2026, 2, 5, 10, tzinfo=UTC)
+    with make_client(transport=httpx.MockTransport(handler)) as client:
+        soon = gdelt_gkg.gkg_hourly(client, start, datetime(2026, 2, 5, 11, 30, tzinfo=UTC))
+        later = gdelt_gkg.gkg_hourly(client, start, start + timedelta(hours=1) + gdelt_gkg.PATIENCE)
+    assert soon.empty
+    assert later["time"].tolist() == [pd.Timestamp("2026-02-05T10:00Z")]
+    assert (later.iloc[0]["en_files"], later.iloc[0]["translated_files"]) == (4, 0)

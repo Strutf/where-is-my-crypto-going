@@ -12,11 +12,12 @@ from datetime import datetime
 import httpx
 import pandas as pd
 
-from wimcg.pipeline.connectors import coinbase, feargreed
+from wimcg.pipeline.connectors import coinbase, feargreed, gdelt_gkg
 
 Connector = Callable[[httpx.Client, datetime, datetime], pd.DataFrame]
 
 CONNECTORS: dict[str, Connector] = {
     "btc-usd-1m": coinbase.btc_usd_1m,
     "fear-greed": feargreed.fear_greed,
+    "gkg-hourly": gdelt_gkg.gkg_hourly,
 }

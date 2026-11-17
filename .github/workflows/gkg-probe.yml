@@ -1,0 +1,38 @@
+name: gkg-probe
+
+# Teste dos arquivos brutos do GKG do GDELT a partir dos servidores do GitHub Actions, antes de
+# a coleta depender deles (ver docs/contexto.md). Roda o conector de verdade para as últimas
+# horas, grava só no disco da própria execução e mostra o tempo gasto e as linhas geradas.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FS_STORAGE: local
+      FS_DATA_DIR: probe-data
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c requirements-pipeline.txt .
+      - name: Últimas horas (sem nada gravado)
+        run: time wimcg update --datasets gkg-hourly
+      - name: De novo (deve continuar da última hora, sem baixar nada outra vez)
+        run: time wimcg update --datasets gkg-hourly
+      - name: Linhas geradas
+        shell: python
+        run: |
+          import glob
+          import pandas as pd
+          df = pd.concat(pd.read_parquet(f) for f in glob.glob("probe-data/parquet/gkg-hourly/*.parquet"))
+          print(df.T.to_string())

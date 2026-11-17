@@ -35,3 +35,12 @@ def test_update_start_fills_a_gap_from_the_last_stored_time(tmp_path):
 def test_update_start_caps_very_old_gaps(tmp_path):
     store = _store(tmp_path, END - timedelta(days=200))
     assert update_start(store, DS, END) == END - MAX_CATCHUP
+
+
+def test_update_start_of_append_only_data_continues_after_the_last_row(tmp_path):
+    # Uma hora de notícias já gravada não muda: não relê as últimas update_hours.
+    news = catalog.get("gkg-hourly")
+    store = LocalStorage(tmp_path)
+    last = END - timedelta(minutes=30)
+    store.write(manifest_key(news.id), json.dumps({"end": format_time(last)}).encode())
+    assert update_start(store, news, END) == last + timedelta(seconds=1)

@@ -97,3 +97,43 @@ def test_aggregate_does_not_match_theme_prefixes():
     # "TERRORISM_X" não é "TERROR": a comparação é por tema inteiro, como no SQL.
     records = pd.DataFrame({"DATE": [20260205100000], "Themes": ["TERRORISM_X;"], "V2Tone": ["0,0"]})
     assert gkg.aggregate(records)["world_terror_articles"].iloc[0] == 0
+
+
+def test_aggregate_counts_the_15_min_files_of_each_feed():
+    records = pd.DataFrame(
+        {
+            "DATE": [20260205100000, 20260205100000, 20260205101500, 20260205100000],
+            "Themes": ["ECON_BITCOIN;", "TERROR;", "TERROR;", "TERROR;"],
+            "V2Tone": ["1", "1", "1", "1"],
+            "translated": [False, False, False, True],
+        }
+    )
+    row = gkg.aggregate(records).iloc[0]
+    assert (row["articles"], row["en_files"], row["translated_files"]) == (4, 2, 1)
+
+
+def test_files_sql_reads_only_the_small_columns():
+    q = gkg.files_sql(datetime(2015, 2, 19, tzinfo=UTC), datetime(2026, 11, 17, tzinfo=UTC))
+    assert "AS en_files" in q and "AS translated_files" in q
+    assert "Themes" not in q and "V2Tone" not in q
+    assert "_PARTITIONTIME >= TIMESTAMP('2015-02-18')" in q
+
+
+def test_old_extraction_without_file_columns_is_accepted_and_filled_later(tmp_path):
+    old = _bq_csv(["2020-12-31 22:00:00", "2020-12-31 23:00:00"])
+    old = "\n".join(line.rsplit(",", 2)[0] for line in old.splitlines()) + "\n"  # sem as duas últimas colunas
+    (tmp_path / "old.csv").write_text(old)
+    df = gkg.read_bigquery_csv(tmp_path / "old.csv")
+    assert list(df.columns) == gkg.columns() and df["en_files"].isna().all()
+
+    (tmp_path / "files.csv").write_text(
+        "time,en_files,translated_files\n2020-12-31 22:00:00 UTC,4,3\n2020-12-31 23:00:00 UTC,4,4\n"
+    )
+    out = tmp_path / "h.parquet"
+    assert main(["gkg-pack", str(tmp_path / "old.csv"), "--files", str(tmp_path / "files.csv"), "--out", str(out)]) == 0
+    packed = gkg.read_history(out)
+    assert packed["translated_files"].tolist() == [3, 4] and packed["en_files"].tolist() == [4, 4]
+
+    # Contagens que não cobrem todas as horas são recusadas.
+    (tmp_path / "short.csv").write_text("time,en_files,translated_files\n2020-12-31 22:00:00 UTC,4,3\n")
+    assert main(["gkg-pack", str(tmp_path / "old.csv"), "--files", str(tmp_path / "short.csv"), "--out", str(out)]) == 1

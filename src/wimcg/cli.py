@@ -67,6 +67,8 @@ def update_start(store, ds: catalog.Dataset, end: datetime) -> datetime:
             f"recuperando só os últimos {MAX_CATCHUP.days} (use `wimcg backfill` para o resto)"
         )
         return min(start, end - MAX_CATCHUP)
+    if ds.append_only:
+        return last_dt + timedelta(seconds=1)
     if last_dt < start:
         log.info("%s: buraco desde %s; recuperando", ds.id, last)
     return min(start, last_dt)
@@ -205,7 +207,8 @@ def cmd_news(args: argparse.Namespace) -> int:
 def cmd_gkg_sql(args: argparse.Namespace) -> int:
     from wimcg import gkg
 
-    print(gkg.sql(parse_time(args.start), parse_time(args.end)))
+    query = gkg.files_sql if args.files else gkg.sql
+    print(query(parse_time(args.start), parse_time(args.end)))
     return 0
 
 
@@ -214,7 +217,7 @@ def cmd_gkg_pack(args: argparse.Namespace) -> int:
     from wimcg import gkg
 
     try:
-        df = gkg.pack([gkg.read_bigquery_csv(p) for p in args.files])
+        df = gkg.pack([gkg.read_bigquery_csv(p) for p in args.csv], [gkg.read_files_csv(p) for p in args.files])
     except (OSError, ValueError) as exc:
         _error(f"gkg-pack: {exc}")
         return 1
@@ -279,10 +282,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("gkg-sql", help="imprime a consulta do BigQuery com as notícias por hora (GKG do GDELT)")
     p.add_argument("--start", required=True, help="início, inclusive (ex.: 2015-02-19)")
     p.add_argument("--end", required=True, help="fim, exclusive (ex.: 2021-01-01)")
+    p.add_argument("--files", action="store_true", help="consulta leve: só os arquivos de 15 min presentes em cada hora")
     p.set_defaults(func=cmd_gkg_sql)
 
     p = sub.add_parser("gkg-pack", help="junta os CSVs exportados do BigQuery (resultado de gkg-sql) num Parquet")
-    p.add_argument("files", nargs="+", help="arquivos .csv ou .csv.gz")
+    p.add_argument("csv", nargs="+", help="arquivos .csv ou .csv.gz")
+    p.add_argument("--files", nargs="+", default=[], help="CSVs de `gkg-sql --files`, para marcar as horas incompletas")
     p.add_argument("--out", default="history/gkg-hourly.parquet")
     p.set_defaults(func=cmd_gkg_pack)
 

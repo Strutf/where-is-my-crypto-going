@@ -45,6 +45,9 @@ class Dataset:
     latest_group: tuple[str, ...] = ()
     # True quando a fonte oferece histórico longo e `wimcg backfill` faz sentido.
     historical: bool = False
+    # True quando uma linha gravada não muda mais: o `update` busca só o que vem depois da última,
+    # em vez de reler as últimas `update_hours`.
+    append_only: bool = False
     # Tamanho de cada bloco do backfill (um commit por bloco): pequeno para dados de 1 minuto.
     backfill_chunk_days: int = 3650
     # False para datasets grandes demais para a API: só Parquet.
@@ -90,6 +93,10 @@ def _gkg_fields() -> tuple[Field, ...]:
     for tp in TOPICS:
         if tp.world:
             fields.append(Field(f"world_{tp.name}_articles", "int", "notícias", f"Notícias do mundo com algum destes temas: {', '.join(tp.themes)}"))
+    fields += [
+        Field("en_files", "int", "arquivos", "Arquivos de 15 min de notícias em inglês que entraram na hora (4 = completa)"),
+        Field("translated_files", "int", "arquivos", "Arquivos de 15 min de notícias traduzidas que entraram na hora (4 = completa)"),
+    ]
     return tuple(fields)
 
 
@@ -196,19 +203,29 @@ DATASETS: tuple[Dataset, ...] = (
         description="Contagem e tom médio das notícias do GKG do GDELT a cada hora, desde "
         "fevereiro de 2015: todas, as de bitcoin e as de assuntos que podem mover o mercado "
         "(juros, bolsas, regulação, ataques hackers, guerras, sanções, incerteza).",
-        provider="GDELT Project (GKG 2.0, via Google BigQuery)",
+        provider="GDELT Project (GKG 2.1): Google BigQuery no histórico, arquivos brutos ao vivo",
         source_url="https://www.gdeltproject.org/data.html#rawdatafiles",
         license="GDELT: uso livre com citação.",
         cadence="1h",
         partition="month",
         key=("time",),
         fields=_gkg_fields(),
+        # Fica "manual" até o conector ser testado a partir do GitHub Actions.
         schedule="manual",
+        # Só vale sem nenhum dado gravado; depois o `update` continua da última hora.
+        update_hours=3,
+        append_only=True,
+        historical=True,
+        backfill_chunk_days=2,
         # Em JSON seriam ~54 MB (contra ~7 MB em Parquet), sem uso até a API existir.
         json_partitions=False,
-        notes="Horas em que o GDELT não publicou nada não têm linha (a maior falha vai de 14/06 a "
-        "02/07/2025). Algumas horas têm pouquíssimas notícias por falha parcial do GDELT: compare "
-        "com `articles` antes de usar as contagens. Os temas de EPU_UNCERTAINTY só se firmam em "
+        critical=False,
+        notes="Uma hora só é gravada depois que o GDELT publica todos os arquivos dela (cerca de "
+        "20 min depois do fim da hora). Horas em que o GDELT não publicou nada não têm linha (a "
+        "maior falha vai de 14/06 a 02/07/2025). Quando en_files ou translated_files é menor que "
+        "4, faltou um arquivo de 15 min e as contagens da hora estão subestimadas: no histórico "
+        "do BigQuery isso acontece em várias horas com as traduções. Colunas de arquivos vazias "
+        "= hora extraída antes de elas existirem. Os temas de EPU_UNCERTAINTY só se firmam em "
         "2016; antes disso trate world_uncertainty_articles como ausente.",
     ),
 )
