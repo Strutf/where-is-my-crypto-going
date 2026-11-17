@@ -180,6 +180,8 @@ Plano:
 
 - **Idioma:** inglês como principal, com troca para português.
 - **Aviso em todas as páginas:** não é recomendação de investimento.
+- **Celular:** o site precisa funcionar bem em telas pequenas, como o do Future Space. No
+  gráfico, tocar num ponto faz o papel de passar o mouse.
 - **Design:** o autor desenha e envia depois; aqui fica só o conteúdo.
 - **Páginas:**
   1. **Início:** gráfico do Bitcoin agora, se está mais volátil que o normal ou calmo, se o
