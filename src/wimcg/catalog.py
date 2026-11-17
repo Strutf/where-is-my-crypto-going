@@ -210,8 +210,7 @@ DATASETS: tuple[Dataset, ...] = (
         partition="month",
         key=("time",),
         fields=_gkg_fields(),
-        # Fica "manual" até o conector ser testado a partir do GitHub Actions.
-        schedule="manual",
+        schedule="realtime",
         # Só vale sem nenhum dado gravado; depois o `update` continua da última hora.
         update_hours=3,
         append_only=True,

@@ -44,7 +44,8 @@ wimcg backfill btc-usd-1m --start 2015-07-20  # histórico (blocos de 30 dias)
 wimcg moves                                   # grandes movimentos recentes (--full: histórico inteiro)
 wimcg news --limit 20                         # notícias dos maiores movimentos (GDELT)
 wimcg gkg-sql --start 2015-02-19 --end 2021-01-01   # consulta do BigQuery (notícias por hora)
-wimcg gkg-pack a.csv b.csv                    # CSVs do BigQuery -> history/gkg-hourly.parquet
+wimcg gkg-sql --files --start 2015-02-19 --end 2026-11-17   # consulta leve: arquivos por hora
+wimcg gkg-pack a.csv b.csv --files f.csv      # CSVs do BigQuery -> history/gkg-hourly.parquet
 wimcg gkg-import                              # grava o histórico no armazenamento
 ruff check src tests && pytest -q
 ```
@@ -59,10 +60,12 @@ ruff check src tests && pytest -q
 - `src/wimcg/moves.py`: detecção dos grandes movimentos.
 - `src/wimcg/news.py`: notícias de antes, durante e depois de cada movimento (GDELT DOC API).
 - `src/wimcg/gkg.py`: notícias por hora do GKG (consulta do BigQuery e agregação ao vivo).
+  Ao vivo, o conector `gdelt_gkg` lê os arquivos brutos de 15 min.
 - `history/gkg-hourly.parquet`: histórico exportado do BigQuery (~3 MB). O Actions o grava no
   Hugging Face, já que o token só existe lá.
-- `.github/workflows/ingest.yml`: coleta a cada 15 min, mais carga histórica por
-  `workflow_dispatch` (`backfill`, `desde`, `ate`; `backfill: gkg-hourly` importa o Parquet).
+- `.github/workflows/ingest.yml`: coleta a cada 15 min (disparada pelo cron-job.org), mais
+  carga histórica por `workflow_dispatch` (`backfill`, `desde`, `ate`; `backfill: gkg-history`
+  importa o Parquet).
 
 ## Cuidados de avaliação (fase 3 em diante)
 

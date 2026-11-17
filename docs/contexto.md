@@ -48,11 +48,26 @@ acordos de paz.
     consultas passaram, mesmo com ~20 s entre elas; as outras levaram 429. Os IPs compartilhados
     do Actions já gastam o limite. **Não serve para cargas grandes no Actions.**
 - **GDELT, arquivos brutos (GKG, a cada 15 min):**
-  - ~7 MB por arquivo, sem limite de requisições;
+  - são dois arquivos a cada 15 min, de 2 a 5 MB cada: as notícias em inglês e as traduzidas
+    de outros idiomas. Sem limite de requisições;
   - as notícias de cripto vêm marcadas com o tema `ECON_BITCOIN`;
   - também trazem os temas de todas as notícias do mundo (conflitos, desastres, acordos);
-  - **decisão:** são a fonte das notícias **ao vivo** no Actions (fase 2). Para o histórico dos
-    movimentos, a API de busca roda localmente, com paciência.
+  - **decisão:** são a fonte das notícias **ao vivo** no Actions (conector `gdelt_gkg`, dataset
+    `gkg-hourly`). Para o histórico dos movimentos, a API de busca roda localmente, com paciência;
+  - **conferência com o BigQuery (17/11/2026):** em cinco horas de 2015 a 2026, a agregação dos
+    8 arquivos da hora é idêntica à do BigQuery em todas as colunas;
+  - **o BigQuery tem buracos:** em outras cinco horas testadas (quatro de nov/2026 e uma de
+    2021), ele está sem um arquivo inteiro de traduções, embora o arquivo exista e tenha sido
+    publicado no horário. A hora fica com 15% a 20% menos notícias. Por isso o dataset tem as
+    colunas `en_files` e `translated_files` (arquivos de 15 min que entraram na hora; 4 =
+    completa). Ao vivo elas já saem preenchidas; no histórico dependem da consulta leve
+    `wimcg gkg-sql --files`, **ainda não rodada**;
+  - **armadilha do endereço público:** https://data.gdeltproject.org guarda por 1 hora a
+    resposta 404 de quem pediu um arquivo antes de ele ser publicado. Em 17/11/2026, dois
+    arquivos já publicados e listados ainda davam 404. O conector lê direto do armazenamento
+    (`storage.googleapis.com/data.gdeltproject.org`), onde o 404 não é guardado;
+  - **dos servidores do GitHub Actions** (workflow `gkg-probe`, 17/11/2026): 2 horas (16
+    arquivos) em 3,6 s, com os mesmos números obtidos localmente.
 - **Histórico longo de notícias:** a API de busca é limitada demais, e os arquivos brutos somam
   terabytes. **Caminho escolhido:** o GDELT no Google BigQuery (base pública; o sandbox gratuito
   dá 1 TB de consulta por mês, sem cartão), extraindo contagens e tom por hora desde 2015.
@@ -120,18 +135,25 @@ Plano:
   em branco de propósito: os dados têm termos de várias fontes).
 - **Configuração no GitHub:** secret `HF_TOKEN` (token fine-grained só deste dataset, chamado
   `wimcg-github`) e variável `FS_HF_REPO`.
-- **Coleta:** `ingest` a cada 15 min pelo agendamento nativo. O cron-job.org é opcional por
-  enquanto e vale configurar na fase 3, para as previsões serem pontuais.
-- **Cargas históricas no Actions:** Fear & Greed desde 2018 e, em seguida, velas desde 2015.
+- **Coleta:** o agendamento nativo do `ingest` não disparou nenhuma vez nas primeiras 3h30 do
+  repositório (como já acontecia no Future Space). Desde 16/11/2026 o disparo vem do
+  cron-job.org, a cada 15 min, com um token do GitHub só deste repositório (permissão Actions:
+  leitura e escrita). **Quando o token expirar, a coleta para:** renovar antes.
+- **Cargas históricas no Actions:** Fear & Greed desde 2018 (feita), notícias por hora desde
+  2015 (feita, `backfill: gkg-history`) e velas desde 2015 (iniciada em 16/11/2026, ~52 s por
+  bloco de 30 dias).
+- **Grandes movimentos:** no dia a dia o `wimcg moves` lê 46 dias de velas e recalcula os
+  últimos 14; o histórico inteiro só é refeito com `--full`, depois de uma carga de velas.
 
 ## Próximos passos
 
-1. Conferir se o agendamento nativo do `ingest` dispara a cada ~15 min.
-2. Terminar a carga histórica das velas desde 2015 e rodar `wimcg moves` no histórico
-   completo.
-3. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
-   completa.
-4. Notícias dos 20 maiores movimentos (GDELT), para a linha do tempo "o que moveu o Bitcoin".
-5. Histórico de notícias pelo BigQuery e teste do ganho das notícias sobre a linha de base.
-6. Coleta ao vivo das notícias pelos arquivos brutos do GDELT.
+1. Conferir a carga das velas desde 2015 (cobertura, buracos da Coinbase) e os grandes
+   movimentos do histórico completo; registrar os números aqui.
+2. Conferir as primeiras coletas disparadas pelo cron-job.org (uma a cada 15 min, 1 a 2 min).
+3. Rodar no BigQuery a consulta leve `wimcg gkg-sql --files` (2015-02-19 até hoje), juntar com
+   `wimcg gkg-pack ... --files` e reimportar, para marcar as horas incompletas do histórico.
+4. Notícias dos grandes movimentos (`move-news`), aos poucos no Actions.
+5. Página do dataset no Hugging Face, com a descrição de cada tabela.
+6. **Fase 3, linha de base:** modelo de direção só com preço e Fear & Greed, com avaliação
+   completa. Depois, o ganho das notícias sobre a linha de base.
 7. **Fase 4:** API e site.
