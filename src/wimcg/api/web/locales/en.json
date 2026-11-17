@@ -176,6 +176,7 @@
     "legend_real_return": "real move",
     "legend_model": "model",
     "legend_real_swing": "real swing",
-    "legend_repeat": "repeat last swing"
+    "legend_repeat": "repeat last swing",
+    "coin_flip": "a coin flip"
   }
 }

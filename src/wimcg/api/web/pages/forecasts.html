@@ -29,10 +29,8 @@
         <button class="btn" type="button" data-ch="24" aria-pressed="false">24 h</button>
       </span>
     </div>
-    <div class="chart px inset" id="plot">
-      <span class="yl"></span><span class="yl"></span>
-      <canvas width="240" height="80" aria-label="{{t:fc.cmp_aria}}"></canvas>
-      <div class="xl"></div>
+    <div class="plot px inset" id="plot">
+      <canvas aria-label="{{t:fc.cmp_aria}}"></canvas>
       <div class="tip px" hidden></div>
       <div class="msg" id="plot-msg">{{t:home.loading}}</div>
     </div>
@@ -124,7 +122,7 @@
     document.getElementById("log").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
   }
   // Previsto contra real: barras = o que aconteceu; marcadores = o modelo e a referência.
-  const plot = new WIMCG.PixelPlot(document.getElementById("plot"));
+  const plot = new WIMCG.ForecastPlot(document.getElementById("plot"));
   const plotMsg = document.getElementById("plot-msg");
   let all = [], view = "ret", ch = 1;
   const DAY7 = 7 * 86400e3;
@@ -147,24 +145,24 @@
         marks: rows.map((r) => [{ v: r.pred_return_pct, color: "ink" }]),
         tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("model_return")}: ${fmtPct(r.pred_return_pct)}<br>${t("real_return")}: ${fmtPct(r.observed_return_pct)}<br>${t("miss_by")}: ${Math.abs(r.pred_return_pct - r.observed_return_pct).toFixed(2)} pp<br>${t("said")}: ${t(r.direction)} · ${r.hit ? t("hit") : t("miss")}`; },
       });
-      legend.innerHTML = `${swatch("up", "bar")}${swatch("down", "bar")} ${t("legend_real_return")} ${swatch("ink", "cross")} ${t("legend_model")}`;
+      legend.innerHTML = `<span>${swatch("up", "bar")}${swatch("down", "bar")} ${t("legend_real_return")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span>`;
     } else if (view === "vol") {
       plot.set({
         n: rows.length, times, zero: true, fmt: (v) => v.toFixed(2) + "%",
         bars: rows.map((r) => ({ v: r.observed_volatility_pct, color: "frost" })),
-        marks: rows.map((r) => [{ v: r.persistence_volatility_pct, color: "muted", shape: "square" }, { v: r.pred_volatility_pct, color: "ink" }]),
+        marks: rows.map((r) => [{ v: r.persistence_volatility_pct, color: "muted", muted: true }, { v: r.pred_volatility_pct, color: "ink" }]),
         tip: (i) => { const r = rows[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("real_swing")}: ${r.observed_volatility_pct.toFixed(2)}%<br>${t("model_swing")}: ${r.pred_volatility_pct.toFixed(2)}% (${t("miss_by")} ${Math.abs(r.pred_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp)<br>${t("repeat_swing")}: ${r.persistence_volatility_pct.toFixed(2)}% (${t("miss_by")} ${Math.abs(r.persistence_volatility_pct - r.observed_volatility_pct).toFixed(2)} pp)`; },
       });
-      legend.innerHTML = `${swatch("frost", "bar")} ${t("legend_real_swing")} ${swatch("ink", "cross")} ${t("legend_model")} ${swatch("muted", "square")} ${t("legend_repeat")}`;
+      legend.innerHTML = `<span>${swatch("frost", "bar")} ${t("legend_real_swing")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span><span>${swatch("muted", "dash2")} ${t("legend_repeat")}</span>`;
     } else {
       // Acerto acumulado desde o início, do modelo e das duas regras sem modelo.
       const cum = (key) => { let k = 0; return rows.map((r, i) => (k += r[key] ? 1 : 0, (k / (i + 1)) * 100)); };
-      const lines = [{ values: cum("always_up_hit"), color: "frost" }, { values: cum("reversal_hit"), color: "muted" }, { values: cum("hit"), color: "accent" }];
+      const lines = [{ values: cum("always_up_hit"), color: "frost", width: 2 }, { values: cum("reversal_hit"), color: "muted", width: 2, dashed: true }, { values: cum("hit"), color: "accent", width: 3 }];
       plot.set({
-        n: rows.length, times, range: [0, 100], fmt: (v) => v.toFixed(0) + "%", lines,
+        n: rows.length, times, range: [0, 100], ref: 50, fmt: (v) => v.toFixed(0) + "%", lines,
         tip: (i) => `${t("after_n").replace("{n}", i + 1)}<br>${t("model_hits")}: ${lines[2].values[i].toFixed(1)}%<br>${t("always_up")}: ${lines[0].values[i].toFixed(1)}%<br>${t("opposite")}: ${lines[1].values[i].toFixed(1)}%`,
       });
-      legend.innerHTML = `${swatch("accent", "line")} ${t("legend_model")} ${swatch("frost", "line")} ${t("always_up")} ${swatch("muted", "line")} ${t("opposite")}`;
+      legend.innerHTML = `<span>${swatch("accent", "line")} ${t("legend_model")}</span><span>${swatch("frost", "line")} ${t("always_up")}</span><span>${swatch("muted", "dline")} ${t("opposite")}</span><span>${swatch("muted", "dline")} 50% = ${t("coin_flip")}</span>`;
     }
   }
   document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; renderPlot(); }));

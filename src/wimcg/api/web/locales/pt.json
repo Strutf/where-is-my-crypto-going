@@ -176,6 +176,7 @@
     "legend_real_return": "movimento real",
     "legend_model": "modelo",
     "legend_real_swing": "oscilação real",
-    "legend_repeat": "repetir a última"
+    "legend_repeat": "repetir a última",
+    "coin_flip": "cara ou coroa"
   }
 }
