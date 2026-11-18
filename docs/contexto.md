@@ -389,6 +389,37 @@ Regras para todos: registrar hipóteses e critérios antes de rodar, nada escolh
 todas as variantes publicadas (inclusive as que não melhoram), intervalos da diferença por
 bootstrap em blocos de 168 h.
 
+## Rodadas de pesquisa no Actions (registrado em 18/11/2026, antes de rodar)
+
+Itens 1 a 5 do plano acima, rodados no GitHub Actions (workflow `research`, só leitura do
+dataset público, sem token). Mesma avaliação mês a mês de 2019-01 a 2026-10, só com as variáveis
+de preço. "Melhor" e "pior" sempre pelo intervalo de 95% da **diferença** (bootstrap em blocos de
+168 h); se o intervalo inclui o zero, é empate.
+
+1. **`gb_noes`** = o gradient boosting atual com `early_stopping=False`. Hipótese: probabilidades
+   menos exageradas em 24 h. Vira a nova base, a menos que o acerto caia (intervalo da diferença
+   inteiro abaixo de zero) em algum horizonte.
+2. **`logit`**: regressão logística (C = 1) sobre `ret_1h`, `ret_4h`, `ret_24h`, `vol_24h` e
+   `ret_1h / vol_24h`, padronizadas no treino; retorno previsto por Ridge. Pergunta: empata com a
+   nova base em 1 h? Se empatar, a vantagem vem de uma reversão bem ponderada.
+3. **`garch`**: GARCH(1,1) com distribuição t, sem média, nos retornos horários da janela de
+   treino, reajustado a cada mês; volatilidade de *h* horas = raiz da soma das variâncias previstas
+   para os *h* passos. Comparado com persistência, HAR e o gb de volatilidade (erro absoluto médio).
+4. **Acerto seletivo e depois de movimentos grandes** (descritivo, para cada modelo de direção):
+   acerto e cobertura quando max(p, 1 − p) > 0,52, 0,55 e 0,60, ao lado da regra de inverter no
+   mesmo subconjunto; acerto nas horas em que a última hora variou mais de 3 desvios-padrão dos
+   retornos horários dos 7 dias anteriores (só o passado); e, só como descrição (usa o futuro), o
+   acerto quando |retorno futuro| > 2 × vol_24h × √h.
+5. **`gb_tuned`**: por horizonte, os últimos 6 meses da janela de treino (com purga de 24 h)
+   viram validação; escolhe `max_iter` ∈ {50, 100, 200} × `min_samples_leaf` ∈ {200, 1000, 3000}
+   (sem parada antecipada) pelo Brier da validação e retreina na janela inteira. As escolhas de
+   cada mês ficam registradas.
+6. Para cada modelo de direção, também o Brier skill com a calibração de 18/11 (λ dos 12 meses
+   anteriores), de 2020-01 em diante.
+
+Variantes de direção testadas: 4 (`gb` de novo, como referência no mesmo ambiente, `gb_noes`,
+`logit`, `gb_tuned`); de volatilidade: 4 (persistência, HAR, gb, `garch`).
+
 ## Próximos passos
 
 1. Retreinar com a faixa provável e a calibração e conferir as primeiras previsões com faixa.

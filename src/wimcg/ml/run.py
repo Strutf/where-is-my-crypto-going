@@ -103,7 +103,8 @@ def _load_runs() -> dict[tuple[str, str], pd.DataFrame]:
     return out
 
 
-def report() -> dict:
+def report(name: str = "direction_eval", baseline: str | None = None) -> dict:
+    """Junta as previsões guardadas. `baseline` (ex.: "gb_noes") liga a comparação pareada com ele."""
     runs = _load_runs()
     meta = json.loads(GROUPS_FILE.read_text())
     table = pd.read_parquet(TABLE)
@@ -125,8 +126,12 @@ def report() -> dict:
                     "mean_abs_bp": float(p["ret"].abs().mean() * 1e4),
                     "slices": evaluate.slices(p),
                     "calibration": evaluate.calibration(p),
+                    "research": evaluate.research_slices(p, table, h),
                 }
             )
+            if baseline and (baseline, set_name) in runs and model != baseline:
+                b = runs[(baseline, set_name)]
+                results[-1]["vs_baseline"] = {"baseline": baseline, **evaluate.paired_diff(p, b[b["horizon"] == h])}
     payload = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "dataset_revision": meta.get("revision"),
@@ -137,9 +142,10 @@ def report() -> dict:
         },
         "results": results,
     }
+    payload["variants_tested"] = sorted({f"{m}/{SETS[s_]}" for m, s_ in runs})
     RESULTS.mkdir(parents=True, exist_ok=True)
-    (RESULTS / "direction_eval.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
-    (RESULTS / "direction_eval.md").write_text(markdown(payload))
+    (RESULTS / f"{name}.json").write_text(json.dumps(payload, indent=1, ensure_ascii=False))
+    (RESULTS / f"{name}.md").write_text(markdown(payload))
     return payload
 
 
@@ -188,6 +194,7 @@ def markdown(payload: dict) -> str:
                 f"{_ci(r['mae_skill'], signed=True)} | {_ci(r['return_bp'], pct=False)} |"
             )
         ref = next(r for r in rows if r["horizon_hours"] == h)
+        lines += research_markdown([r for r in rows if r["horizon_hours"] == h])
         lines += [
             "",
             (f"Neste horizonte, sempre alta acerta {ref['always_up']['value'] * 100:.1f}% e inverter acerta "
@@ -195,3 +202,71 @@ def markdown(payload: dict) -> str:
             "",
         ]
     return "\n".join(lines)
+
+
+def research_markdown(rows: list[dict]) -> list[str]:
+    """Tabelas dos recortes da pesquisa de 18/11/2026, quando existem."""
+    rows = [r for r in rows if "research" in r]
+    if not rows:
+        return []
+    pc = lambda v: "—" if v is None else f"{v * 100:.1f}"
+    out = ["", "Recortes (acerto do modelo / da regra de inverter, % das horas):", "",
+           "| Modelo | Variáveis | p > 0,52 | p > 0,55 | p > 0,60 | Depois de movimento grande | Movimento futuro grande (descritivo) |", "|---|---|---|---|---|---|---|"]
+    for r in rows:
+        x = r["research"]
+        cell = lambda d: f"{pc(d['accuracy'])} / {pc(d['reversal'])} ({pc(d['coverage'])})"
+        out.append(f"| {r['model']} | {r['features']} | " + " | ".join(cell(x["selective"][k]) for k in ("0.52", "0.55", "0.6")) + f" | {cell(x['after_big_move'])} | {cell(x['big_future_descriptive'])} |")
+    out += ["", "Brier skill sem e com a calibração de 18/11 (de 2020-01), e comparação pareada com a base:", "",
+            "| Modelo | Variáveis | Brier skill sem | com | Diferença (IC 95%) | Acerto − base (IC 95%) | Brier skill − base (IC 95%) | Escolhas (gb_tuned) |", "|---|---|---|---|---|---|---|---|"]
+    for r in rows:
+        c = r["research"].get("calibrated")
+        vb = r.get("vs_baseline")
+        f = lambda m: f"{m['value'] * 100:+.2f} [{m['ci95'][0] * 100:+.2f}, {m['ci95'][1] * 100:+.2f}]"
+        cal = f"{c['brier_skill_raw'] * 100:+.2f}% | {c['brier_skill_calibrated'] * 100:+.2f}% | {(c['brier_skill_calibrated'] - c['brier_skill_raw']) * 100:+.2f} [{c['diff_ci95'][0] * 100:+.2f}, {c['diff_ci95'][1] * 100:+.2f}]" if c else "— | — | —"
+        base = f"{f(vb['accuracy'])} | {f(vb['brier_skill'])}" if vb else "— | —"
+        ch = ", ".join(f"{k}: {v}" for k, v in (r["research"].get("choices") or {}).items()) or "—"
+        out.append(f"| {r['model']} | {r['features']} | {cal} | {base} | {ch} |")
+    return out
+
+
+def vol_eval(first: str, last: str) -> dict:
+    """Volatilidade: persistência, HAR, gb e GARCH, mês a mês, com a diferença de erro e IC."""
+    from wimcg.ml import volatility
+
+    table = volatility.add_columns(pd.read_parquet(TABLE))
+    groups = json.loads(GROUPS_FILE.read_text())["groups"]
+    cols = groups["price"] + groups["market"]
+    preds = {}
+    for name in ("persistence", "har", "gb", "garch"):
+        t0 = time.monotonic()
+        preds[name] = volatility.walk_forward(table, cols, name, first, last, evaluate.TRAIN_YEARS, evaluate.PURGE)
+        preds[name].to_parquet(TABLE.parent / f"vol_{name}.parquet")
+        log.info("volatilidade %s: %.0f s", name, time.monotonic() - t0)
+    out = {"period": [first[:7], last[:7]], "horizons": {}}
+    for h in features.HORIZONS:
+        merged = None
+        for name, p in preds.items():
+            q = p[p["horizon"] == h][["time", "pred_vol", "vol"]].rename(columns={"pred_vol": name})
+            merged = q if merged is None else merged.merge(q[["time", name]], on="time")
+        res = {"n": len(merged)}
+        for name in preds:
+            res[name] = {"mae": float((merged[name] - merged["vol"]).abs().mean())}
+        for name in ("gb", "garch"):
+            for ref in ("har", "persistence", "gb"):
+                if name == ref:
+                    continue
+                stat = lambda d, a=name, b=ref: float((d[a] - d["vol"]).abs().mean() / (d[b] - d["vol"]).abs().mean() - 1)
+                res[name][f"vs_{ref}"] = {"value": stat(merged), "ci95": evaluate._block_ci(stat, merged)}
+        out["horizons"][str(h)] = res
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    (RESULTS / "volatility_eval.json").write_text(json.dumps(out, indent=1))
+    lines = ["# Volatilidade: persistência, HAR, gradient boosting e GARCH", "",
+             (f"Gerado por `wimcg ml-vol-eval`. Teste mês a mês de {out['period'][0]} a {out['period'][1]}, treino nos 3 anos anteriores. "
+             "Erro absoluto médio da volatilidade das próximas h horas, em pontos percentuais; diferenças relativas com IC de 95% "
+             "(bootstrap em blocos de 168 h). Negativo = erra menos."), "",
+             "| Horizonte | Persistência | HAR | gb | GARCH | gb vs HAR | GARCH vs HAR | GARCH vs gb |", "|---|---|---|---|---|---|---|---|"]
+    f = lambda m: f"{m['value'] * 100:+.1f}% [{m['ci95'][0] * 100:+.1f}, {m['ci95'][1] * 100:+.1f}]"
+    for h, r in out["horizons"].items():
+        lines.append(f"| {h} h | {r['persistence']['mae']:.3f} | {r['har']['mae']:.3f} | {r['gb']['mae']:.3f} | {r['garch']['mae']:.3f} | {f(r['gb']['vs_har'])} | {f(r['garch']['vs_har'])} | {f(r['garch']['vs_gb'])} |")
+    (RESULTS / "volatility_eval.md").write_text("\n".join(lines) + "\n")
+    return out

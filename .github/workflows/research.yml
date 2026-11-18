@@ -1,0 +1,54 @@
+name: research
+
+# Rodadas de pesquisa do modelo (registradas antes em docs/contexto.md). Só lê o dataset público
+# do Hugging Face: não usa nenhum segredo. O relatório fica como artefato da execução e é
+# conferido e commitado à mão.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Modelos de direção (separados por vírgula)"
+        type: string
+        default: "gb,gb_noes,logit,gb_tuned"
+      baseline:
+        description: "Base da comparação pareada"
+        type: string
+        default: "gb_noes"
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c requirements-pipeline.txt ".[pipeline,hf,ml,research]"
+      - name: Baixar os dados e montar a tabela
+        run: wimcg ml-data
+      - name: Direção, mês a mês
+        env:
+          MODELS: ${{ inputs.models }}
+        run: wimcg ml-eval --models "$MODELS" --sets price --seeds 1 --jobs 4
+      - name: Volatilidade, mês a mês
+        run: wimcg ml-vol-eval
+      - name: Relatórios
+        env:
+          BASELINE: ${{ inputs.baseline }}
+        run: |
+          wimcg ml-report --name research_eval --baseline "$BASELINE"
+          python research/interval_eval.py
+      - name: Guardar relatórios
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: research-results
+          path: research/results/
+          if-no-files-found: error

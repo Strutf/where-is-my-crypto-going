@@ -6,6 +6,11 @@ a tabela inteira (de onde a `gru` tira as sequências, sempre olhando só para t
 
 - **gb:** gradient boosting do scikit-learn, um classificador e um regressor por horizonte.
 - **mlp:** rede neural densa sobre as mesmas variáveis, com uma saída por horizonte.
+- **gb_noes:** o mesmo gradient boosting sem a parada antecipada padrão do scikit-learn, que separa a
+  validação ao acaso (otimista com alvos sobrepostos).
+- **gb_tuned:** gradient boosting sem parada antecipada, com `max_iter` e `min_samples_leaf`
+  escolhidos por horizonte numa validação temporal (os últimos 6 meses da janela de treino).
+- **logit:** regressão logística (e Ridge para o retorno) sobre poucos retornos e a volatilidade.
 - **gru:** rede recorrente que lê as últimas `SEQ_HOURS` horas (retorno, amplitude e volume, hora a
   hora) e junta o resultado às mesmas variáveis da `mlp`. Comparar `gru` com `mlp` mede o que ler
   a sequência acrescenta.
@@ -35,23 +40,109 @@ def _targets(df: pd.DataFrame, h: int) -> tuple[np.ndarray, np.ndarray]:
 class GradientBoosting:
     name = "gb"
 
+    def __init__(self, seed: int = 0, early_stopping: bool | str = "auto"):
+        # "auto" é o padrão do scikit-learn (o modelo publicado em 17/11/2026 usa esse).
+        self.early_stopping = early_stopping
+
     def fit(self, train: pd.DataFrame, features: list[str], history: pd.DataFrame) -> None:
         from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 
         self.features = features
         self.models = {}
         x = train[features].to_numpy(float)
+        params = {**GB_PARAMS, "early_stopping": self.early_stopping, "random_state": 0}
         for h in HORIZONS:
             up, ret = _targets(train, h)
             ok = ~np.isnan(ret)
-            clf = HistGradientBoostingClassifier(**GB_PARAMS, random_state=0).fit(x[ok], up[ok])
+            clf = HistGradientBoostingClassifier(**params).fit(x[ok], up[ok])
             # Erro absoluto: o retorno previsto é a mediana, e a medida de erro é o erro absoluto.
-            reg = HistGradientBoostingRegressor(**GB_PARAMS, loss="absolute_error", random_state=0).fit(x[ok], ret[ok])
+            reg = HistGradientBoostingRegressor(**params, loss="absolute_error").fit(x[ok], ret[ok])
             self.models[h] = (clf, reg)
 
     def predict(self, test: pd.DataFrame) -> dict[int, tuple[np.ndarray, np.ndarray]]:
         x = test[self.features].to_numpy(float)
         return {h: (clf.predict_proba(x)[:, 1], reg.predict(x)) for h, (clf, reg) in self.models.items()}
+
+
+TUNE_GRID = [(it, leaf) for it in (50, 100, 200) for leaf in (200, 1000, 3000)]
+TUNE_VALID = pd.DateOffset(months=6)
+
+
+class TunedGB:
+    """Gradient boosting com a regularização escolhida por horizonte numa validação temporal."""
+
+    name = "gb_tuned"
+
+    def __init__(self, seed: int = 0):
+        self.choice: dict[int, str] = {}
+
+    def fit(self, train: pd.DataFrame, features: list[str], history: pd.DataFrame) -> None:
+        from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+
+        self.features = features
+        self.models = {}
+        base = {k: v for k, v in GB_PARAMS.items() if k not in ("max_iter", "min_samples_leaf")}
+        split = train.index.max() - TUNE_VALID
+        # Purga: as linhas de treino da escolha não podem ter o alvo dentro da validação.
+        fit_rows = train[train.index < split - pd.Timedelta(hours=max(HORIZONS))]
+        valid = train[train.index >= split]
+        x_all, x_fit, x_val = (d[features].to_numpy(float) for d in (train, fit_rows, valid))
+        for h in HORIZONS:
+            up_fit, ret_fit = _targets(fit_rows, h)
+            up_val, ret_val = _targets(valid, h)
+            ok_fit, ok_val = ~np.isnan(ret_fit), ~np.isnan(ret_val)
+            scores = []
+            for it, leaf in TUNE_GRID:
+                clf = HistGradientBoostingClassifier(**base, max_iter=it, min_samples_leaf=leaf, early_stopping=False, random_state=0)
+                clf.fit(x_fit[ok_fit], up_fit[ok_fit])
+                prob = clf.predict_proba(x_val[ok_val])[:, 1]
+                scores.append(np.mean((prob - up_val[ok_val]) ** 2))
+            it, leaf = TUNE_GRID[int(np.argmin(scores))]
+            self.choice[h] = f"{it}/{leaf}"
+            up, ret = _targets(train, h)
+            ok = ~np.isnan(ret)
+            clf = HistGradientBoostingClassifier(**base, max_iter=it, min_samples_leaf=leaf, early_stopping=False, random_state=0).fit(x_all[ok], up[ok])
+            reg = HistGradientBoostingRegressor(**GB_PARAMS, early_stopping=False, loss="absolute_error", random_state=0).fit(x_all[ok], ret[ok])
+            self.models[h] = (clf, reg)
+
+    def predict(self, test: pd.DataFrame) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+        x = test[self.features].to_numpy(float)
+        return {h: (clf.predict_proba(x)[:, 1], reg.predict(x)) for h, (clf, reg) in self.models.items()}
+
+
+LOGIT_COLUMNS = ("ret_1h", "ret_4h", "ret_24h", "vol_24h")
+
+
+class Logit:
+    """Referência linear: logística para a direção e Ridge para o retorno, poucas variáveis."""
+
+    name = "logit"
+
+    def __init__(self, seed: int = 0):
+        pass
+
+    @staticmethod
+    def _x(df: pd.DataFrame) -> np.ndarray:
+        x = df[list(LOGIT_COLUMNS)].to_numpy(float)
+        ratio = x[:, 0] / np.where(x[:, 3] > 0, x[:, 3], np.nan)  # retorno em unidades de volatilidade
+        return np.column_stack([x, ratio])
+
+    def fit(self, train: pd.DataFrame, features: list[str], history: pd.DataFrame) -> None:
+        from sklearn.linear_model import LogisticRegression, Ridge
+
+        x = self._x(train)
+        self.mean, self.std = np.nanmean(x, axis=0), np.nanstd(x, axis=0)
+        self.std[self.std == 0] = 1
+        z = np.nan_to_num((x - self.mean) / self.std)
+        self.models = {}
+        for h in HORIZONS:
+            up, ret = _targets(train, h)
+            ok = ~np.isnan(ret)
+            self.models[h] = (LogisticRegression(C=1.0, max_iter=1000).fit(z[ok], up[ok]), Ridge(alpha=1.0).fit(z[ok], ret[ok]))
+
+    def predict(self, test: pd.DataFrame) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+        z = np.nan_to_num((self._x(test) - self.mean) / self.std)
+        return {h: (clf.predict_proba(z)[:, 1], reg.predict(z)) for h, (clf, reg) in self.models.items()}
 
 
 class _Scaler:
@@ -181,4 +272,12 @@ class GRU(_NeuralNet):
     sequence = True
 
 
-MODELS = {"gb": GradientBoosting, "mlp": MLP, "gru": GRU}
+# Cada entrada recebe a semente (as que não usam, ignoram).
+MODELS = {
+    "gb": GradientBoosting,
+    "gb_noes": lambda seed=0: GradientBoosting(seed, early_stopping=False),
+    "gb_tuned": TunedGB,
+    "logit": Logit,
+    "mlp": MLP,
+    "gru": GRU,
+}

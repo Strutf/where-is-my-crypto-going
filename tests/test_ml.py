@@ -171,3 +171,37 @@ def test_recent_rows_end_before_the_month_with_purge():
     past = intervals.recent(df, month)
     assert past["time"].max() < month - pd.Timedelta(hours=24)
     assert past["time"].min() >= month - pd.DateOffset(months=12)
+
+
+def test_new_research_models_give_valid_forecasts(monkeypatch):
+    from wimcg.ml import models
+
+    hourly, fear_greed, news = _inputs(9)
+    table, groups = _table(hourly, fear_greed, news)
+    monkeypatch.setattr(models, "TUNE_GRID", [(20, 200), (40, 1000)])  # grade pequena para o teste ser rápido
+    for name in ("gb_noes", "logit", "gb_tuned"):
+        preds = evaluate.walk_forward(table, groups["price"], name, "2024-12-01", "2024-12-01")
+        assert len(preds) and preds["prob_up"].between(0, 1).all() and preds["pred_ret"].notna().all()
+    assert preds["choice"].isin(["20/200", "40/1000"]).all()  # gb_tuned registra a escolha
+
+
+def test_garch_uses_only_past_returns():
+    from wimcg.ml import volatility
+
+    hourly, fear_greed, news = _inputs(10)
+    table, _groups = _table(hourly, fear_greed, news)
+    table = volatility.add_columns(table)
+    train = table[table.index < "2024-12-01"]
+    test = table[(table.index >= "2024-12-01") & (table.index < "2024-12-11")]
+    g = volatility.Garch()
+    g.fit(train, [], table)
+    before = g.predict(test)
+    # Mudar os retornos depois da hora 100 do teste não muda as previsões até ela.
+    changed = table.copy()
+    changed.loc[changed.index > test.index[100], "ret_1h"] *= 5
+    g.history = changed
+    after = g.predict(test)
+    for h in (1, 4, 24):
+        assert (before[h] > 0).all()
+        np.testing.assert_allclose(before[h][:101], after[h][:101])
+        assert not np.allclose(before[h][102:], after[h][102:])

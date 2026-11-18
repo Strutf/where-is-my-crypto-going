@@ -30,6 +30,8 @@ ml = [
 ]
 # Redes neurais, só para a pesquisa local (o PyTorch tem perto de 1 GB).
 nn = ["torch>=2.5"]
+# Pesquisa (workflow research e local): GARCH como referência da volatilidade.
+research = ["arch>=7"]
 dev = [
     "where-is-my-crypto-going[pipeline,api]",
     # Os testes do treino usam o scikit-learn; o PyTorch (pesado) não é necessário para eles.

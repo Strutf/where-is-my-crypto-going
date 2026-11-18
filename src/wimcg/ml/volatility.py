@@ -8,7 +8,10 @@ Modelos comparados, na mesma avaliação andando para a frente da direção:
 - **har:** regressão linear do log da volatilidade futura sobre o log da volatilidade das últimas
   *h* horas, do último dia, da última semana e do último mês, a referência clássica (Corsi, 2009);
 - **gb:** gradient boosting sobre o log da volatilidade, com as variáveis de preço e de estado do
-  mercado e as mesmas volatilidades passadas do HAR.
+  mercado e as mesmas volatilidades passadas do HAR;
+- **garch:** GARCH(1,1) com distribuição t, sem média, ajustado nos retornos horários da janela de
+  treino; a variância é filtrada hora a hora (só com retornos já conhecidos) e a volatilidade de
+  *h* horas é a raiz da soma das variâncias previstas para os *h* passos.
 
 Medidas: erro absoluto médio da volatilidade (em pontos percentuais) e do seu log (erro relativo),
 cada uma comparada com a persistência e com o HAR.
@@ -99,7 +102,42 @@ class GradientBoosting:
         return {h: np.exp(m.predict(test[cols].to_numpy(float))) * bias for h, (cols, m, bias) in self.models.items()}
 
 
-MODELS = {"persistence": Persistence, "har": HAR, "gb": GradientBoosting}
+class Garch:
+    name = "garch"
+
+    def fit(self, train: pd.DataFrame, features: list[str], history: pd.DataFrame | None = None) -> None:
+        from arch import arch_model
+
+        r = (train["ret_1h"] * 100).dropna().to_numpy()
+        res = arch_model(r, mean="Zero", vol="GARCH", p=1, q=1, dist="t", rescale=False).fit(disp="off")
+        self.omega, self.alpha, self.beta = (float(res.params[k]) for k in ("omega", "alpha[1]", "beta[1]"))
+        self.start = train.index.min()
+        self.history = history
+
+    def predict(self, test: pd.DataFrame) -> dict[int, np.ndarray]:
+        # Filtra a variância desde o começo da janela de treino até o fim do teste: σ²(t+1) depende
+        # só do retorno da hora t, já fechada no momento da previsão.
+        hist = self.history if self.history is not None else test
+        r = (hist.loc[(hist.index >= self.start) & (hist.index <= test.index.max()), "ret_1h"] * 100).fillna(0.0)
+        a, b, w = self.alpha, self.beta, self.omega
+        persistence = a + b
+        uncond = w / (1 - persistence) if persistence < 1 else float(np.mean(r.to_numpy() ** 2))
+        sig2 = np.empty(len(r))
+        prev = uncond
+        for i, ri in enumerate(r.to_numpy()):
+            prev = w + a * ri * ri + b * prev  # variância da hora seguinte, sabendo até esta
+            sig2[i] = prev
+        next_var = pd.Series(sig2, index=r.index).reindex(test.index).to_numpy()
+        out = {}
+        for h in HORIZONS:
+            k = np.arange(h)
+            # E[σ²(t+1+k)] = incondicional + persistência^k × (σ²(t+1) − incondicional)
+            path = uncond + (persistence ** k)[None, :] * (next_var[:, None] - uncond)
+            out[h] = np.sqrt(np.clip(path, 0, None).sum(axis=1))
+        return out
+
+
+MODELS = {"persistence": Persistence, "har": HAR, "gb": GradientBoosting, "garch": Garch}
 
 
 def walk_forward(table: pd.DataFrame, features: list[str], model_name: str, first: str, last: str, train_years: int, purge: pd.Timedelta) -> pd.DataFrame:
@@ -111,7 +149,7 @@ def walk_forward(table: pd.DataFrame, features: list[str], model_name: str, firs
         test = table[(table.index >= start) & (table.index < end)]
         if test.empty:
             continue
-        model.fit(train, features)
+        model.fit(train, features, table)
         for h, pred in model.predict(test).items():
             out.append(pd.DataFrame({"time": test.index, "horizon": h, "pred_vol": pred, "vol": test[f"rv_next_{h}h"].to_numpy()}))
     preds = pd.concat(out, ignore_index=True)

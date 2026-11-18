@@ -449,8 +449,19 @@ def cmd_ml_eval(args: argparse.Namespace) -> int:
 def cmd_ml_report(args: argparse.Namespace) -> int:
     from wimcg.ml import run
 
-    run.report()
-    print((run.RESULTS / "direction_eval.md").read_text())
+    run.report(args.name, args.baseline)
+    print((run.RESULTS / f"{args.name}.md").read_text())
+    return 0
+
+
+def cmd_ml_vol_eval(args: argparse.Namespace) -> int:
+    from wimcg.ml import run
+
+    if not run.TABLE.exists():
+        _error("sem tabela de treino: rode `wimcg ml-data` antes")
+        return 1
+    run.vol_eval(args.first, args.last or run.last_full_month())
+    print((run.RESULTS / "volatility_eval.md").read_text())
     return 0
 
 
@@ -533,7 +544,14 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_ml_eval)
 
     p = sub.add_parser("ml-report", help="resume as previsões guardadas em research/results/")
+    p.add_argument("--name", default="direction_eval", help="nome dos arquivos de saída")
+    p.add_argument("--baseline", help="modelo para a comparação pareada (ex.: gb_noes)")
     p.set_defaults(func=cmd_ml_report)
+
+    p = sub.add_parser("ml-vol-eval", help="compara os modelos de volatilidade (persistência, HAR, gb, GARCH)")
+    p.add_argument("--first", default="2019-01-01")
+    p.add_argument("--last", help="último mês de teste (padrão: o último mês completo)")
+    p.set_defaults(func=cmd_ml_vol_eval)
 
     p = sub.add_parser("datasets", help="lista os datasets do catálogo")
     p.set_defaults(func=cmd_datasets)
