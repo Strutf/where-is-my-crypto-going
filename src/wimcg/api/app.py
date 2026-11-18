@@ -351,14 +351,15 @@ def create_app(storage: Storage | None = None, rate_limit_per_minute: int | None
         pointer = read_json(MODELS_POINTER)
         if pointer is None:
             raise HTTPException(404, "nenhum modelo publicado ainda")
-        return json_response({"model_version": pointer["model_version"], **pointer.get("summary", {}), "disclaimer": DISCLAIMER}, 3600)
+        # 5 min: depois de um treino, o site mostra logo o modelo novo.
+        return json_response({"model_version": pointer["model_version"], **pointer.get("summary", {}), "disclaimer": DISCLAIMER}, 300)
 
     @app.get("/v1/models", summary="Histórico dos treinos")
     def models_index():
         payload = read_json(MODELS_INDEX)
         if payload is None:
             raise HTTPException(404, "nenhum treino registrado ainda")
-        return json_response(payload, 3600)
+        return json_response(payload, 300)
 
     return app
 
