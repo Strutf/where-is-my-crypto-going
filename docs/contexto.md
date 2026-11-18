@@ -356,7 +356,13 @@ nenhum parâmetro olhando o período de teste.
   IC 95% +0,48 a +0,87); 24 h −4,49% → −0,01% (diferença +4,48, IC +3,33 a +5,60). O critério
   pedia ≥ 0 em 4 h e 24 h; 24 h ficou em −0,01%. Acerto da direção praticamente igual (−0,1 ponto).
   λ típico: 0,90 em 1 h, 0,55 em 4 h e 0,12 em 24 h (em 24 h a probabilidade fica quase toda na
-  taxa de alta habitual). Decisão sobre aplicar em 24 h: com o autor (ver abaixo).
+  taxa de alta habitual).
+- **Decisão (autor, 18/11/2026): aplicar a calibração também em 24 h, apesar do critério.** O
+  critério registrado (Brier skill ≥ 0) foi mal formulado: o que importava era não deixar a
+  probabilidade pior que a taxa de alta habitual. Em 24 h, −0,01% é igual a zero dentro do ruído,
+  e sem calibração o modelo fica em −4,49%, claramente pior. A mudança foi decidida **depois** de
+  ver o resultado e fica registrada como tal; nos próximos registros, os critérios devem usar o
+  intervalo de confiança da diferença.
 
 ## Plano para melhorar a direção (18/11/2026)
 
