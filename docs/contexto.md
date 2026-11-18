@@ -422,7 +422,7 @@ Variantes de direção testadas: 4 (`gb` de novo, como referência no mesmo ambi
 
 **Resultados** (workflow `research`, execução 44409971767, dataset `e27e190d8f`; relatórios em
 `research/results/research_eval.md` e `volatility_eval.md`; a avaliação da faixa e da calibração
-saiu idêntica à feita localmente):
+saiu igual à feita localmente, com diferenças de arredondamento da ordem de 10⁻¹⁴):
 
 1. **`gb_noes` vira a nova base**, como registrado: acerto igual ao do `gb` nos três horizontes
    (intervalos da diferença incluem o zero). A hipótese de probabilidades menos exageradas em 24 h
