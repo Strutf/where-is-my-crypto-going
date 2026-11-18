@@ -82,6 +82,8 @@ ruff check src tests && pytest -q
   - `evaluate.py`: avaliação andando para a frente, medidas e intervalos de confiança;
   - `run.py`: rodadas em paralelo e relatório;
   - `volatility.py`: volatilidade realizada, referências (persistência, HAR) e gradient boosting;
+  - `intervals.py`: faixa provável (quantis do retorno ÷ volatilidade prevista) e calibração da
+    probabilidade, estimadas nos 12 meses anteriores (avaliação em `research/interval_eval.py`);
   - `train.py`: treino mensal publicado, avaliação mês a mês e trava de publicação;
   - `serve.py`: previsão a cada coleta (tabela `predictions`, nunca reescrita), verificação
     (`verification`) e resumo para o site.

@@ -192,6 +192,11 @@ A partir da comparação, o projeto publica dois modelos de gradient boosting, p
   histórica, fica publicada para ser conferida ao vivo, com transparência;
 - **volatilidade** (o quanto o preço vai oscilar): na avaliação de 2019 a 2026, erra de 20% a 25%
   menos que repetir a volatilidade recente e de 4% a 8% menos que o HAR, a referência clássica.
+- **faixa provável do preço**, com 90% e 50% de chance, a partir da volatilidade prevista: no
+  teste de 2020 a 2026, a faixa de 90% conteve o preço final em 89,9% a 90,1% das vezes e a de 50%
+  em 49,5% a 49,7%, em todos os anos ([resultados](research/results/interval_eval.md));
+- a **probabilidade de alta** é calibrada (encolhida em direção à proporção habitual de horas de
+  alta), porque o modelo exagerava a confiança em 4 h e 24 h.
 
 Como no Future Space:
 

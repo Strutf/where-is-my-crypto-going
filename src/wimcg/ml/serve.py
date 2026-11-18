@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from wimcg.ml import features, volatility
+from wimcg.ml import features, intervals, volatility
 from wimcg.partitions import format_time, manifest_key, parse_time
 from wimcg.storage import Storage
 
@@ -159,24 +159,35 @@ def predict(store: Storage, now: datetime | None = None) -> pd.DataFrame:
     direction = bundle["direction"].predict(row)
     vol = bundle["volatility"].predict(row)
     rows = []
+    base = float(row["close"].iloc[0])
     for h in features.HORIZONS:
-        prob, ret = float(direction[h][0][0]), float(direction[h][1][0])
+        raw, ret = float(direction[h][0][0]), float(direction[h][1][0])
+        prob = raw
+        cal = (bundle.get("calibration") or {}).get(h)
+        if cal and cal.get("applied"):
+            prob = float(intervals.calibrate(raw, cal["climatology"], cal["lambda"]))
         past = float(row[f"ret_{h}h"].iloc[0])
-        rows.append(
-            {
-                "time": issue + HOUR,
-                "horizon_hours": h,
-                "target_time": issue + HOUR + pd.Timedelta(hours=h),
-                "base_price": float(row["close"].iloc[0]),
-                "prob_up": round(prob, 4),
-                "direction": "up" if prob > 0.5 else "down",
-                "pred_return_pct": round((np.exp(ret) - 1) * 100, 4),
-                "pred_volatility_pct": round(float(vol[h][0]), 4),
-                "reversal_direction": "up" if past < 0 else "down",
-                "persistence_volatility_pct": round(float(row[f"rv_past_{h}h"].iloc[0]) * np.sqrt(h), 4),
-                "model_version": bundle["model_version"],
-            }
-        )
+        pred_vol = float(vol[h][0])
+        out = {
+            "time": issue + HOUR,
+            "horizon_hours": h,
+            "target_time": issue + HOUR + pd.Timedelta(hours=h),
+            "base_price": base,
+            "prob_up": round(prob, 4),
+            "prob_up_raw": round(raw, 4),
+            "direction": "up" if prob > 0.5 else "down",
+            "pred_return_pct": round((np.exp(ret) - 1) * 100, 4),
+            "pred_volatility_pct": round(pred_vol, 4),
+            "reversal_direction": "up" if past < 0 else "down",
+            "persistence_volatility_pct": round(float(row[f"rv_past_{h}h"].iloc[0]) * np.sqrt(h), 4),
+            "model_version": bundle["model_version"],
+        }
+        band = (bundle.get("bands") or {}).get(h)
+        if band:
+            limits = intervals.band(pred_vol, band["quantiles"])
+            for q, name in ((0.05, "range_low_90"), (0.95, "range_high_90"), (0.25, "range_low_50"), (0.75, "range_high_50")):
+                out[name] = round(float(intervals.to_price(base, limits[q])), 2)
+        rows.append(out)
     return pd.DataFrame(rows)
 
 
@@ -207,8 +218,14 @@ def verify(store: Storage, now: datetime | None = None, days: int = 35) -> pd.Da
         observed = float(close[target] / close[issue] - 1) * 100
         observed_vol = float(np.sqrt(window.sum())) * 100
         observed_dir = "up" if observed > 0 else "down"
+        ranges = {k: getattr(p, k, None) for k in ("range_low_90", "range_high_90", "range_low_50", "range_high_50")}
+        ranges = {k: (None if v is None or pd.isna(v) else float(v)) for k, v in ranges.items()}
+        price = float(close[target])
         rows.append(
             {
+                **ranges,
+                "in_range_90": _inside(ranges, "90", price),
+                "in_range_50": _inside(ranges, "50", price),
                 "time": p.time,
                 "horizon_hours": int(p.horizon_hours),
                 "target_time": p.target_time,
@@ -231,11 +248,27 @@ def verify(store: Storage, now: datetime | None = None, days: int = 35) -> pd.Da
     return pd.DataFrame(rows)
 
 
+def _inside(ranges: dict, level: str, price: float) -> bool | None:
+    lo, hi = ranges[f"range_low_{level}"], ranges[f"range_high_{level}"]
+    return None if lo is None or hi is None else bool(lo <= price <= hi)
+
+
 def _group_summary(g: pd.DataFrame) -> dict:
     def r(x: float) -> float:
         return round(float(x), 4)
 
+    def coverage(col: str):
+        if col not in g:
+            return None, 0
+        known = g[col].dropna()
+        return (r(known.astype(bool).mean()) if len(known) else None), len(known)
+
+    cov90, n_range = coverage("in_range_90")
+    cov50, _ = coverage("in_range_50")
     return {
+        "range_n": n_range,
+        "range_coverage_90": cov90,
+        "range_coverage_50": cov50,
         "n": len(g),
         "accuracy": r(g["hit"].mean()),
         "always_up_accuracy": r(g["always_up_hit"].mean()),

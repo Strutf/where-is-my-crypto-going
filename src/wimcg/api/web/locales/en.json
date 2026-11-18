@@ -41,7 +41,7 @@
     "regime": "Regime",
     "from_high": "From 1-year high",
     "next_title": "Next hours, according to the model",
-    "next_note": "Each forecast is issued once, right after an hour closes, and checked later in public. The direction model does not beat simple rules in our tests; read it as an experiment.",
+    "next_note": "Each forecast is issued once, right after an hour closes, and checked later in public. The likely range is the most reliable part: in tests on 2019–2026 data, the 90% range held the final price 90% of the time. The up/down call is weak: most of the time it is close to a coin flip, and the label next to it says how weak.",
     "see_forecasts": "How the model is doing"
   },
   "fc": {
@@ -66,7 +66,8 @@
     "view_label": "What to compare",
     "v_ret": "Return",
     "v_vol": "Swing",
-    "v_acc": "Hit rate"
+    "v_acc": "Hit rate",
+    "v_range": "Likely range"
   },
   "news": {
     "title": "Bitcoin in the news",
@@ -109,7 +110,10 @@
     "limits_h": "Limits",
     "lim1": "Markets change. A pattern that held in the past can vanish, and these models can be wrong for long stretches.",
     "lim2": "Forecasts use the close of each hour; real trades happen at other prices and carry costs far larger than the edges measured here.",
-    "lim3": "This is research, not advice. Nothing here suggests buying, selling or holding Bitcoin or anything else."
+    "lim3": "This is research, not advice. Nothing here suggests buying, selling or holding Bitcoin or anything else.",
+    "model_range": "Likely range: how far the price can go, from the swing forecast. In the past 12 months, the real move divided by the forecast swing tells how wide the range must be to hold the final price 90% (or 50%) of the time.",
+    "model_cal": "Calibration: the up/down probability is pulled toward the usual share of rising hours, by however much the last 12 months show it was overconfident. So 60% means about 60%.",
+    "found_range": "Likely range: in the 2020–2026 test, the 90% range held the final price 89.9% to 90.1% of the time (1, 4 and 24 hours), between 89% and 92% in every year, and it was narrower than a fixed range with the same hit rate."
   },
   "js": {
     "loading": "Loading…",
@@ -180,6 +184,20 @@
     "coin_flip": "a coin flip",
     "waiting": "Waiting",
     "legend_waiting": "waiting for the result",
-    "waiting_until": "Result at {time} UTC"
+    "waiting_until": "Result at {time} UTC",
+    "likely_range": "Likely range",
+    "strength_weak": "weak signal",
+    "strength_moderate": "moderate signal",
+    "strength_strong": "strong signal",
+    "no_range_yet": "Likely ranges start with the model trained on 18 Nov 2026",
+    "ended_at": "Price ended at",
+    "inside": "inside the 90% range",
+    "outside": "outside the 90% range",
+    "legend_band90": "90% range",
+    "legend_band50": "50% range",
+    "legend_ended": "where the price ended",
+    "range_cov": "Inside 90% range",
+    "range_90": "90% range",
+    "cmp_note_range": "Each column is one forecast from the last 7 days: the light band is the range that should hold the final price 90% of the time, the strong band 50% of the time, and the dash is where the price really ended (as a change from the starting price). About 1 in 10 dashes should land outside the light band."
   }
 }

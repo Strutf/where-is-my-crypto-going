@@ -37,6 +37,9 @@ def store(tmp_path, monkeypatch):
 
 
 def test_train_predict_once_and_verify(store, monkeypatch):
+    from wimcg.ml import intervals
+
+    monkeypatch.setattr(intervals, "MIN_ROWS", 100)  # só 2 meses de avaliação nos dados sintéticos
     assert main(["train", "--publish", "--evaluate-from", "2024-12-01", "--last", "2025-01-01"]) == 0
     report = serve.current_report(store)
     assert report["evaluation"]["period"] == ["2024-12", "2025-01"]
@@ -48,6 +51,15 @@ def test_train_predict_once_and_verify(store, monkeypatch):
     assert rows["time"].unique().tolist() == [last_hour + pd.Timedelta(hours=1)]
     assert rows["horizon_hours"].tolist() == [1, 4, 24]
     assert ((rows["prob_up"] >= 0) & (rows["prob_up"] <= 1)).all() and (rows["pred_volatility_pct"] > 0).all()
+    # Faixa provável em preços, em volta do preço de partida, com a de 50% dentro da de 90%.
+    assert (rows["range_low_90"] < rows["range_low_50"]).all() and (rows["range_low_50"] < rows["range_high_50"]).all()
+    assert (rows["range_high_50"] < rows["range_high_90"]).all()
+    assert (rows["range_low_90"] < rows["base_price"]).all() and (rows["base_price"] < rows["range_high_90"]).all()
+    # Probabilidade publicada = a calibrada; a do modelo fica guardada ao lado.
+    report = serve.current_report(store)
+    for r in rows.itertuples():
+        cal = report["calibration"][str(r.horizon_hours)]
+        assert r.prob_up == pytest.approx(cal["climatology"] + cal["lambda"] * (r.prob_up_raw - cal["climatology"]), abs=1e-4)
     write_dataset(store, catalog.get("predictions"), rows)
     # A mesma hora não é prevista de novo (a tabela de previsões nunca é reescrita).
     assert serve.predict(store, now=now + pd.Timedelta(minutes=15)).empty
@@ -61,8 +73,22 @@ def test_train_predict_once_and_verify(store, monkeypatch):
         expected = (close[last_hour + pd.Timedelta(hours=h)] / close[last_hour] - 1) * 100
         assert checked.loc[h, "observed_return_pct"] == pytest.approx(expected, abs=1e-3)
         assert checked.loc[h, "hit"] == (checked.loc[h, "direction"] == ("up" if expected > 0 else "down"))
+        final = close[last_hour + pd.Timedelta(hours=h)]
+        assert checked.loc[h, "in_range_90"] == (checked.loc[h, "range_low_90"] <= final <= checked.loc[h, "range_high_90"])
     summary = serve.summarize(checked.reset_index(), now + pd.Timedelta(days=2))
     assert {g["horizon_hours"] for g in summary["windows"]["all"]} == {1, 4, 24}
+    assert all(g["range_n"] == 1 and g["range_coverage_90"] in (0.0, 1.0) for g in summary["windows"]["all"])
+
+
+def test_old_models_without_bands_still_predict(store, monkeypatch):
+    """O modelo publicado antes de 18/11/2026 não tem faixa nem calibração: a previsão sai sem elas."""
+    assert main(["train", "--publish", "--evaluate-from", "2024-12-01", "--last", "2025-01-01"]) == 0
+    bundle = serve.load_bundle(store)
+    old = {k: v for k, v in bundle.items() if k not in ("bands", "calibration")}
+    monkeypatch.setattr(serve, "load_bundle", lambda _store: old)
+    last_hour = load_dataset(store, "btc-usd-1h")["time"].max()
+    rows = serve.predict(store, now=last_hour + pd.Timedelta(hours=1, minutes=5))
+    assert (rows["prob_up"] == rows["prob_up_raw"]).all() and "range_low_90" not in rows
 
 
 def test_stale_data_is_not_predicted(store):

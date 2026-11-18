@@ -41,7 +41,7 @@
     "regime": "Regime",
     "from_high": "Do pico de 1 ano",
     "next_title": "Próximas horas, segundo o modelo",
-    "next_note": "Cada previsão é emitida uma única vez, logo depois que a hora fecha, e conferida depois em público. Nos nossos testes, a previsão de direção não supera regras simples; leia como um experimento.",
+    "next_note": "Cada previsão é emitida uma única vez, logo depois que a hora fecha, e conferida depois em público. A faixa provável é a parte mais confiável: nos testes com dados de 2019 a 2026, a faixa de 90% conteve o preço final em 90% das vezes. A indicação de alta ou baixa é fraca: na maior parte do tempo fica perto de cara ou coroa, e a marcação ao lado diz o quão fraca.",
     "see_forecasts": "Como o modelo está indo"
   },
   "fc": {
@@ -66,7 +66,8 @@
     "view_label": "O que comparar",
     "v_ret": "Retorno",
     "v_vol": "Oscilação",
-    "v_acc": "Acerto"
+    "v_acc": "Acerto",
+    "v_range": "Faixa provável"
   },
   "news": {
     "title": "Bitcoin nas notícias",
@@ -109,7 +110,10 @@
     "limits_h": "Limites",
     "lim1": "Mercados mudam. Um padrão que valeu no passado pode sumir, e estes modelos podem errar por longos períodos.",
     "lim2": "As previsões usam o fechamento de cada hora; negócios reais acontecem a outros preços e têm custos muito maiores que as vantagens medidas aqui.",
-    "lim3": "Isto é pesquisa, não recomendação. Nada aqui sugere comprar, vender ou manter Bitcoin ou qualquer outra coisa."
+    "lim3": "Isto é pesquisa, não recomendação. Nada aqui sugere comprar, vender ou manter Bitcoin ou qualquer outra coisa.",
+    "model_range": "Faixa provável: até onde o preço pode ir, a partir da previsão de oscilação. Nos últimos 12 meses, o movimento real dividido pela oscilação prevista diz qual largura a faixa precisa ter para conter o preço final em 90% (ou 50%) das vezes.",
+    "model_cal": "Calibração: a probabilidade de alta é puxada para a proporção habitual de horas de alta, na medida em que os últimos 12 meses mostram que ela exagerava a confiança. Assim, 60% quer dizer cerca de 60%.",
+    "found_range": "Faixa provável: no teste de 2020 a 2026, a faixa de 90% conteve o preço final em 89,9% a 90,1% das vezes (1, 4 e 24 horas), entre 89% e 92% em todos os anos, e foi mais estreita que uma faixa fixa com o mesmo acerto."
   },
   "js": {
     "loading": "Carregando…",
@@ -180,6 +184,20 @@
     "coin_flip": "cara ou coroa",
     "waiting": "Aguardando",
     "legend_waiting": "aguardando o resultado",
-    "waiting_until": "Resultado às {time} UTC"
+    "waiting_until": "Resultado às {time} UTC",
+    "likely_range": "Faixa provável",
+    "strength_weak": "sinal fraco",
+    "strength_moderate": "sinal moderado",
+    "strength_strong": "sinal forte",
+    "no_range_yet": "As faixas prováveis começam com o modelo treinado em 18/11/2026",
+    "ended_at": "O preço terminou em",
+    "inside": "dentro da faixa de 90%",
+    "outside": "fora da faixa de 90%",
+    "legend_band90": "faixa de 90%",
+    "legend_band50": "faixa de 50%",
+    "legend_ended": "onde o preço terminou",
+    "range_cov": "Dentro da faixa de 90%",
+    "range_90": "Faixa de 90%",
+    "cmp_note_range": "Cada coluna é uma previsão dos últimos 7 dias: a faixa clara deveria conter o preço final em 90% das vezes, a forte em 50%, e o traço mostra onde o preço realmente terminou (como variação a partir do preço de partida). Cerca de 1 em cada 10 traços deve cair fora da faixa clara."
   }
 }

@@ -10,6 +10,12 @@ Cada treino faz duas coisas:
    junto com os das referências (sempre alta, inverter, persistência, HAR);
 2. **modelo publicado:** treinado nos 3 anos mais recentes, com tudo o que já tem alvo conhecido.
 
+Faixa provável e calibração (`wimcg.ml.intervals`): estimadas nas previsões fora da amostra dos
+12 meses mais recentes da avaliação e guardadas no pacote. Avaliadas em
+`research/interval_eval.py` (18/11/2026): a faixa cobre o que promete (90% e 50%) em todos os
+anos, e a calibração tira o excesso de confiança de 4 h e 24 h. `CALIBRATE` diz em quais horizontes
+a probabilidade publicada é a calibrada.
+
 Trava (`compare`): o modelo novo só substitui o atual se, nos meses avaliados pelos dois, o acerto
 da direção não cair mais que `ACCURACY_TOLERANCE` e o erro da volatilidade não subir mais que
 `VOLATILITY_TOLERANCE`. Como o procedimento é o mesmo, diferenças só aparecem quando o código, as
@@ -27,12 +33,14 @@ from datetime import UTC, datetime
 import numpy as np
 import pandas as pd
 
-from wimcg.ml import evaluate, features, models, volatility
+from wimcg.ml import evaluate, features, intervals, models, volatility
 from wimcg.ml.models import GradientBoosting
 
 log = logging.getLogger(__name__)
 
 EVAL_START = "2019-01-01"
+# Horizontes em que a probabilidade publicada é a calibrada (ver docs/contexto.md, 18/11/2026).
+CALIBRATE = {1: True, 4: True, 24: True}
 ACCURACY_TOLERANCE = 0.005  # meio ponto percentual
 VOLATILITY_TOLERANCE = 1.02  # erro até 2% maior
 
@@ -112,14 +120,30 @@ def totals(months: list[dict], kind: str, h: int, keep: set[str] | None = None) 
     return {"n": n, **{k.removeprefix("abs_error_") + "_mae": s(k) / n for k in sel[0] if k.startswith("abs_error_")}}
 
 
-def evaluate_monthly(table: pd.DataFrame, groups: dict[str, list[str]], first: str, last: str) -> list[dict]:
+def evaluate_monthly(table: pd.DataFrame, groups: dict[str, list[str]], first: str, last: str) -> tuple[list[dict], pd.DataFrame, pd.DataFrame]:
+    """Somas por mês, mais as previsões fora da amostra (direção e volatilidade do gb)."""
     cols = feature_columns(groups)
     direction = evaluate.walk_forward(table, cols["direction"], "gb", first, last)
     vols = {
         name: volatility.walk_forward(table, cols["volatility"], name, first, last, evaluate.TRAIN_YEARS, evaluate.PURGE)
         for name in ("gb", "har", "persistence")
     }
-    return _month_rows(direction, vols, table)
+    return _month_rows(direction, vols, table), direction, vols["gb"]
+
+
+def bands_and_calibration(table: pd.DataFrame, direction: pd.DataFrame, vol: pd.DataFrame, end: pd.Timestamp) -> tuple[dict, dict]:
+    """Quantis de z (faixa) e λ (calibração) por horizonte, nos 12 meses antes de `end`."""
+    bands, calibration = {}, {}
+    for h in features.HORIZONS:
+        v = intervals.recent(vol[vol["horizon"] == h], end)
+        ret = table[f"ret_next_{h}h"].reindex(pd.DatetimeIndex(v["time"])).to_numpy() * 100
+        if len(v) >= intervals.MIN_ROWS:
+            bands[h] = {"quantiles": intervals.z_quantiles(ret, v["pred_vol"].to_numpy()), "rows": len(v)}
+        d = intervals.recent(direction[direction["horizon"] == h], end)
+        if len(d) >= intervals.MIN_ROWS:
+            lam = intervals.shrink_lambda(d["prob_up"], d["climatology"], (d["ret"] > 0).astype(float))
+            calibration[h] = {"lambda": lam, "rows": len(d), "applied": CALIBRATE[h]}
+    return bands, calibration
 
 
 def fit_final(table: pd.DataFrame, groups: dict[str, list[str]]) -> dict:
@@ -130,7 +154,9 @@ def fit_final(table: pd.DataFrame, groups: dict[str, list[str]]) -> dict:
     direction.fit(recent, cols["direction"], recent)
     vol = volatility.GradientBoosting()
     vol.fit(recent, cols["volatility"])
-    return {"direction": direction, "volatility": vol, "train_rows": len(recent), "train_start": str(recent.index.min())}
+    # Taxa de alta da janela de treino: o ponto para onde a calibração encolhe a probabilidade.
+    climatology = {h: float(recent[f"up_next_{h}h"].mean()) for h in features.HORIZONS}
+    return {"direction": direction, "volatility": vol, "climatology": climatology, "train_rows": len(recent), "train_start": str(recent.index.min())}
 
 
 def _git(*args: str) -> str | None:
@@ -151,8 +177,13 @@ def train(table: pd.DataFrame, groups: dict[str, list[str]], last_test: str, eva
     """Devolve (pacote com os modelos, relatório)."""
     import sklearn
 
-    months = evaluate_monthly(table, groups, evaluate_from, last_test)
+    months, direction_oos, vol_oos = evaluate_monthly(table, groups, evaluate_from, last_test)
     fitted = fit_final(table, groups)
+    # Faixa e calibração vêm do fim da avaliação: o mês seguinte ao último avaliado.
+    end = pd.Timestamp(last_test, tz="UTC") + pd.offsets.MonthBegin(1)
+    bands, calibration = bands_and_calibration(table, direction_oos, vol_oos, end)
+    for h, c in calibration.items():
+        c["climatology"] = fitted["climatology"][h]
     now = datetime.now(UTC)
     version = f"v{features.FEATURE_VERSION}-{now:%Y%m%d}"
     cols = feature_columns(groups)
@@ -171,13 +202,15 @@ def train(table: pd.DataFrame, groups: dict[str, list[str]], last_test: str, eva
             "volatility": {str(h): totals(months, "volatility", h) for h in features.HORIZONS},
             "months": months,
         },
+        "bands": {str(h): b for h, b in bands.items()},
+        "calibration": {str(h): c for h, c in calibration.items()},
         "reproducibility": {
             "code": code_version(),
             "hyperparameters": {"direction": models.GB_PARAMS, "volatility": volatility.GB_PARAMS},
             "environment": {"python": platform.python_version(), "scikit-learn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__},
         },
     }
-    bundle = {"model_version": version, "features": cols, "direction": fitted["direction"], "volatility": fitted["volatility"]}
+    bundle = {"model_version": version, "features": cols, "direction": fitted["direction"], "volatility": fitted["volatility"], "bands": bands, "calibration": calibration}
     return bundle, summary
 
 

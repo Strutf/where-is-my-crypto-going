@@ -136,11 +136,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
 .px.inset .bar i { background: var(--panel); }
 .card .meta { font-family: var(--data); font-size: 15px; line-height: 1.6; color: var(--muted); }
 .card .meta b { color: var(--ink); font-weight: 500; }
+.card .strength { font-family: var(--label); font-size: 13px; font-weight: 400; text-transform: uppercase; color: var(--muted); letter-spacing: .03em; }
+.card .range { font-family: var(--data); font-size: 15px; line-height: 1.6; display: grid; padding-top: 6px; border-top: 2px dotted var(--grid); }
+.card .range b { font-weight: 500; color: var(--ink); }
 .section { display: grid; gap: 16px; }
 .section > header { display: grid; gap: 6px; }
 .tbl { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-family: var(--data); font-size: 15px; }
-.tbl table { min-width: 680px; }
+.tbl table { min-width: 820px; }
 th { font-family: var(--label); font-size: 14px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 8px 10px; border-bottom: var(--b) solid var(--line); }
 td { padding: 8px 10px; border-bottom: 2px dotted var(--grid); vertical-align: middle; }
 td.r, th.r { text-align: right; }
@@ -152,6 +155,8 @@ td.r, th.r { text-align: right; }
 .legend .sw.dash { width: 20px; height: 4px; }
 .legend .sw.dash2 { width: 20px; height: 3px; background: linear-gradient(90deg, var(--c) 0 8px, transparent 8px 12px, var(--c) 12px); }
 .legend .sw.line { width: 22px; height: 3px; }
+.legend .sw.band90 { width: 12px; height: 18px; background: color-mix(in srgb, var(--frost) 30%, transparent); }
+.legend .sw.band50 { width: 12px; height: 10px; background: color-mix(in srgb, var(--frost) 75%, transparent); }
 .legend .sw.wait { width: 12px; height: 14px; background: radial-gradient(var(--c) 1px, transparent 1.5px) 0 0 / 4px 4px; box-shadow: 0 0 0 1px var(--c); }
 .legend .sw.dline { width: 22px; height: 2px; background: repeating-linear-gradient(90deg, var(--c) 0 6px, transparent 6px 10px); }
 .plot { position: relative; padding: 12px; }

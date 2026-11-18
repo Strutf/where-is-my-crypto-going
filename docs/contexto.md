@@ -317,9 +317,75 @@ Plano:
 - **Dependências:** o grupo `ml` (scikit-learn, com versões fixas iguais às do Future Space) vai
   ao Actions; o PyTorch fica no grupo `nn`, só para a pesquisa local.
 
+## Faixa provável e calibração (registrado em 18/11/2026, antes de rodar)
+
+Pedido do autor: manter as previsões de alta e baixa, deixá-las honestas e acrescentar uma faixa
+provável de preço. Avaliação feita sobre as previsões fora da amostra já guardadas (comparação
+de 17/11: direção = gb só preço; volatilidade = gb com preço e estado do mercado), de 2020-01 a
+2026-10 (2019 serve só de histórico). Em cada mês *m*, tudo é estimado só com as previsões dos
+12 meses anteriores a *m* cujo resultado já era conhecido (purga de 24 h).
+
+**Faixa provável.** z = retorno real (log, %) ÷ volatilidade prevista (%). Os quantis de z nos 12
+meses anteriores dão a faixa do mês: 90% = quantis 5% e 95%; 50% = quantis 25% e 75%, vezes a
+volatilidade prevista da hora. Referências: (a) quantis do retorno sem escalar pela volatilidade
+(faixa de largura fixa no mês); (b) Normal(0, σ) com σ do HAR. Medidas: cobertura das faixas de
+90% e 50%, largura média e perda pinball média dos quantis 5%, 25%, 75% e 95%.
+**Critério de sucesso:** cobertura geral entre 88% e 92% (faixa de 90%) e entre 48% e 52% (faixa
+de 50%) em cada horizonte; cobertura de cada ano entre 85% e 95%; pinball menor que as duas
+referências. Se falhar, a faixa não vai ao site.
+
+**Calibração da direção.** p' = c + λ·(p − c), c = taxa de alta da janela de treino,
+λ = Σ(p − c)(y − c) / Σ(p − c)², cortado em [0, 1], estimado nos 12 meses anteriores.
+**Critério de sucesso:** Brier skill ≥ 0 em 4 h e 24 h e não pior em 1 h (diferença com intervalo
+de 95% por bootstrap em blocos de 168 h); acerto da direção não pior que o do modelo sem
+calibração por mais de 0,3 ponto. Se falhar, a probabilidade publicada continua a do modelo.
+
+Variantes testadas: só estas (uma faixa com duas referências, uma calibração). Não se escolhe
+nenhum parâmetro olhando o período de teste.
+
+**Resultados** (`python research/interval_eval.py`, em `research/results/interval_eval.md`):
+
+- **Faixa provável: passou em todos os critérios.** Cobertura da faixa de 90%: 89,9%, 90,0% e
+  90,1% (1, 4 e 24 h); da de 50%: 49,6%, 49,5% e 49,7%. Cada ano entre 89,1% e 91,5%. Pinball
+  menor que as duas referências em todos os horizontes, com faixa mais estreita que a fixa e a
+  mesma cobertura. A Normal com HAR cobre menos que o prometido (83% em 1 h): o retorno tem caudas
+  mais grossas que a normal. Nos dias de agitação extrema, a faixa de 90% cobre um pouco mais (91%
+  a 92%).
+- **Calibração: melhorou muito, mas falhou o critério registrado em 24 h por 0,01 ponto.**
+  Brier skill sem e com calibração: 1 h +0,87% → +0,91%; 4 h +0,13% → +0,81% (diferença +0,68,
+  IC 95% +0,48 a +0,87); 24 h −4,49% → −0,01% (diferença +4,48, IC +3,33 a +5,60). O critério
+  pedia ≥ 0 em 4 h e 24 h; 24 h ficou em −0,01%. Acerto da direção praticamente igual (−0,1 ponto).
+  λ típico: 0,90 em 1 h, 0,55 em 4 h e 0,12 em 24 h (em 24 h a probabilidade fica quase toda na
+  taxa de alta habitual). Decisão sobre aplicar em 24 h: com o autor (ver abaixo).
+
+## Plano para melhorar a direção (18/11/2026)
+
+O autor pediu para manter as previsões de alta e baixa e pensar em como melhorá-las. Com os dados
+atuais, a direção não tem sinal aproveitável (quando o modelo está confiante, a regra de inverter
+também acerta mais; a vantagem sobre ela fica em 1 a 1,5 ponto e vem caindo). Ordem proposta:
+
+1. **Corrigir a base:** o gradient boosting usa a parada antecipada padrão do scikit-learn
+   (`early_stopping="auto"`, ligada acima de 10 mil linhas), com validação sorteada, o que fica
+   otimista com alvos sobrepostos. Refazer a comparação com ela desligada e usar essa nova base.
+2. **Regressão logística** sobre retornos e volatilidade recentes: se empatar com o gradient
+   boosting, a vantagem vem só de uma reversão bem ponderada, e o modelo linear é mais explicável.
+3. **GARCH** como referência da volatilidade (prometido no README e ainda não feito).
+4. **Acerto seletivo e depois de grandes movimentos**, com a marcação de "grande movimento"
+   calculada só com o que se sabia na hora (a tabela `big-moves` escolhe a hora representativa
+   olhando as horas seguintes, então não serve para isso).
+5. **Regularização por horizonte** com validação temporal (a mais cara e a com mais risco de
+   ganho por sorte; por último).
+6. **Informação nova**, a única que pode mudar a direção de verdade: mercado de derivativos
+   (taxa de financiamento dos perpétuos, contratos em aberto, liquidações), calendário de eventos
+   (juros e inflação nos EUA) e dados da blockchain. Cada fonte testada antes a partir do Actions.
+
+Regras para todos: registrar hipóteses e critérios antes de rodar, nada escolhido no mês de teste,
+todas as variantes publicadas (inclusive as que não melhoram), intervalos da diferença por
+bootstrap em blocos de 168 h.
+
 ## Próximos passos
 
-1. Primeiro treino publicado (`train` com `force`) e conferir as primeiras previsões e verificações.
+1. Retreinar com a faixa provável e a calibração e conferir as primeiras previsões com faixa.
 2. Notícias dos grandes movimentos (`move-news`) também localmente, para a linha do tempo do site.
 3. Confirmar que o visualizador do Hugging Face voltou depois da reimportação do histórico de
    notícias (17/11/2026, todas as partições de `gkg-hourly` com as mesmas colunas).

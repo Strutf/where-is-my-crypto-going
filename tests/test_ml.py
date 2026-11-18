@@ -133,3 +133,41 @@ def test_summary_of_a_coin_flip_is_not_significant():
     lo, hi = s["accuracy"]["ci95"]
     assert lo < 0.5 < hi
     assert s["mae_skill"]["value"] == pytest.approx(0.0)
+
+
+def test_calibration_shrinks_toward_climatology():
+    from wimcg.ml import intervals
+
+    assert intervals.calibrate(0.75, 0.52, 0.3) == pytest.approx(0.589)
+    # Modelo confiante demais: diz 30% ou 70%, mas a frequência real é 45% e 55%.
+    rng = np.random.default_rng(6)
+    p = rng.choice([0.3, 0.7], 20000)
+    y = (rng.uniform(size=p.size) < np.where(p > 0.5, 0.55, 0.45)).astype(float)
+    lam = intervals.shrink_lambda(p, np.full(p.size, 0.5), y)
+    assert 0.15 < lam < 0.35  # o certo é 0,25: 0,5 + 0,25 × 0,2 = 0,55
+    assert intervals.shrink_lambda(p, np.full(p.size, 0.5), 1 - y) == 0.0  # sinal invertido: não usa o modelo
+
+
+def test_band_covers_what_it_promises():
+    from wimcg.ml import intervals
+
+    rng = np.random.default_rng(7)
+    vol = rng.uniform(0.5, 3, 40000)
+    ret = vol * rng.standard_t(4, vol.size) / np.sqrt(2)  # caudas mais grossas que a normal
+    q = intervals.z_quantiles(ret[:20000], vol[:20000])
+    b = intervals.band(vol[20000:], q)
+    inside90 = np.mean((ret[20000:] >= b[0.05]) & (ret[20000:] <= b[0.95]))
+    inside50 = np.mean((ret[20000:] >= b[0.25]) & (ret[20000:] <= b[0.75]))
+    assert abs(inside90 - 0.90) < 0.01 and abs(inside50 - 0.50) < 0.015
+    assert intervals.to_price(100.0, 10.0) == pytest.approx(100 * np.exp(0.1))
+
+
+def test_recent_rows_end_before_the_month_with_purge():
+    from wimcg.ml import intervals
+
+    times = pd.date_range("2024-01-01", "2025-03-01", freq="h", tz="UTC")
+    df = pd.DataFrame({"time": times})
+    month = pd.Timestamp("2025-02-01", tz="UTC")
+    past = intervals.recent(df, month)
+    assert past["time"].max() < month - pd.Timedelta(hours=24)
+    assert past["time"].min() >= month - pd.DateOffset(months=12)

@@ -168,6 +168,7 @@
       this.s = spec; this.hover = -1; this.tip.hidden = true;
       const vals = [];
       (spec.bars || []).forEach((b) => b && vals.push(b.v));
+      (spec.bands || []).forEach((b) => b && vals.push(b.lo90, b.hi90));
       (spec.marks || []).forEach((ms) => ms.forEach((m) => m && vals.push(m.v)));
       (spec.lines || []).forEach((l) => l.values.forEach((v) => v != null && vals.push(v)));
       if (spec.zero) vals.push(0);
@@ -222,6 +223,16 @@
         ctx.globalAlpha = 1;
       }
       const bw = Math.max(2, Math.min(26, Math.floor(this.slot * 0.6)));
+      // Faixas (faixa provável): a de 90% clara e larga, a de 50% mais forte por dentro.
+      (s.bands || []).forEach((b, i) => {
+        if (!b) return;
+        const w = Math.max(3, Math.min(30, Math.floor(this.slot * 0.7))), x0 = this.X(i) - Math.floor(w / 2);
+        ctx.fillStyle = tok("frost"); ctx.globalAlpha = 0.3;
+        ctx.fillRect(x0, this.Y(b.hi90), w, Math.max(2, this.Y(b.lo90) - this.Y(b.hi90)));
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(x0, this.Y(b.hi50), w, Math.max(2, this.Y(b.lo50) - this.Y(b.hi50)));
+        ctx.globalAlpha = 1;
+      });
       // Coluna de previsão ainda sem resultado: pontilhada, no lugar onde a barra vai entrar.
       (s.pending || []).forEach((on, i) => {
         if (!on) return;
@@ -331,20 +342,29 @@
     }
   }
 
+  // Força do sinal de direção: perto de 50% é quase cara ou coroa.
+  const strength = (p) => { const d = Math.abs(p - 0.5); return d < 0.05 ? "weak" : d < 0.1 ? "moderate" : "strong"; };
+  const fmtK = (v) => "$" + Math.round(v).toLocaleString("en-US");
+
   // Cartões das previsões mais recentes (página inicial e página de previsões).
   function forecastCards(rows) {
     return rows.map((r) => {
       const cls = r.direction === "up" ? "up" : "down";
       const on = Math.round(r.prob_up * 10);
       const blocks = Array.from({ length: 10 }, (_, i) => `<i style="${i < on ? "background:var(--up)" : ""}"></i>`).join("");
+      const range = r.range_low_90 != null
+        ? `<span class="range"><span class="lbl">${t("likely_range")}</span>
+           <span><b>${fmtK(r.range_low_90)} – ${fmtK(r.range_high_90)}</b> <span class="muted">(90%)</span></span>
+           <span><b>${fmtK(r.range_low_50)} – ${fmtK(r.range_high_50)}</b> <span class="muted">(50%)</span></span></span>`
+        : "";
       return `<div class="card px inset">
         <span class="lbl">${t("in_hours").replace("{h}", r.horizon_hours)}</span>
-        <span class="dir ${cls}">${icon(r.direction, 4)} ${t(r.direction)}</span>
+        <span class="dir ${cls}">${icon(r.direction, 4)} ${t(r.direction)} <span class="strength">${t("strength_" + strength(r.prob_up))}</span></span>
         <div class="bar" role="img" aria-label="${(r.prob_up * 100).toFixed(1)}% ${t("chance_up")}">${blocks}</div>
         <span class="meta"><b>${(r.prob_up * 100).toFixed(1)}%</b> ${t("chance_up")}<br>
-        <b>±${r.pred_volatility_pct.toFixed(2)}%</b> ${t("expected_swing")}<br>
-        ${t("from_price")} <b>${fmtUSD(r.base_price)}</b><br>
-        ${t("result_at")} <b>${fmtTime(r.target_time)}</b> UTC</span>
+        <b>±${r.pred_volatility_pct.toFixed(2)}%</b> ${t("expected_swing")}</span>
+        ${range}
+        <span class="meta">${t("from_price")} <b>${fmtUSD(r.base_price)}</b> · ${t("result_at")} <b>${fmtTime(r.target_time)}</b> UTC</span>
       </div>`;
     }).join("");
   }
@@ -361,5 +381,5 @@
     document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon, Number(el.dataset.scale || 3)); });
   });
 
-  window.WIMCG = { t, tok, LANG, LOCALE, fmtUSD, fmtPct, fmtTime, getJson, icon, forecastCards, PixelChart, ForecastPlot, Scene, onTheme: (f) => themeListeners.push(f) };
+  window.WIMCG = { t, tok, LANG, LOCALE, fmtUSD, fmtPct, fmtTime, fmtK, getJson, icon, forecastCards, strength, PixelChart, ForecastPlot, Scene, onTheme: (f) => themeListeners.push(f) };
 })();

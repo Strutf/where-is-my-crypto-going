@@ -19,7 +19,8 @@
     </header>
     <div class="btns">
       <span class="btns" role="group" aria-label="{{t:fc.view_label}}">
-        <button class="btn" type="button" data-view="ret" aria-pressed="true">{{t:fc.v_ret}}</button>
+        <button class="btn" type="button" data-view="range" aria-pressed="true">{{t:fc.v_range}}</button>
+        <button class="btn" type="button" data-view="ret" aria-pressed="false">{{t:fc.v_ret}}</button>
         <button class="btn" type="button" data-view="vol" aria-pressed="false">{{t:fc.v_vol}}</button>
         <button class="btn" type="button" data-view="acc" aria-pressed="false">{{t:fc.v_acc}}</button>
       </span>
@@ -75,7 +76,7 @@
 </main>
 <script>
 (() => {
-  const { t, getJson, fmtUSD, fmtPct, fmtTime, icon, forecastCards } = WIMCG;
+  const { t, getJson, fmtUSD, fmtPct, fmtTime, fmtK, icon, forecastCards } = WIMCG;
   const pct = (v) => (v * 100).toFixed(1) + "%";
   const best = (vals, higher = true) => { const m = higher ? Math.max(...vals) : Math.min(...vals); return vals.map((v) => v === m); };
 
@@ -90,15 +91,16 @@
   function renderScore(win) {
     document.querySelectorAll("[data-win]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.win === win));
     const rows = summary.windows[win] || [];
-    const head = `<tr><th>${t("horizon")}</th><th class="r">${t("checked")}</th><th class="r">${t("model_hits")}</th><th class="r">${t("always_up")}</th><th class="r">${t("opposite")}</th><th class="r">${t("swing_err_model")}</th><th class="r">${t("swing_err_naive")}</th></tr>`;
+    const head = `<tr><th>${t("horizon")}</th><th class="r">${t("checked")}</th><th class="r">${t("model_hits")}</th><th class="r">${t("always_up")}</th><th class="r">${t("opposite")}</th><th class="r">${t("swing_err_model")}</th><th class="r">${t("swing_err_naive")}</th><th class="r">${t("range_cov")}</th></tr>`;
     const body = rows.map((r) => {
       const [a, b, c] = best([r.accuracy, r.always_up_accuracy, r.reversal_accuracy]);
+      const cov = r.range_coverage_90 == null ? "—" : `${pct(r.range_coverage_90)} <span class="muted">(${r.range_n})</span>`;
       const [v1, v2] = best([r.volatility_mae_pct, r.volatility_mae_persistence_pct], false);
       const mark = (on, txt) => on ? `<b style="color:var(--accent);font-weight:400">${txt}</b>` : txt;
       return `<tr><td>${r.horizon_hours} h</td><td class="r">${r.n}</td><td class="r">${mark(a, pct(r.accuracy))}</td><td class="r">${mark(b, pct(r.always_up_accuracy))}</td><td class="r">${mark(c, pct(r.reversal_accuracy))}</td>
-        <td class="r">${mark(v1, r.volatility_mae_pct.toFixed(2) + " pp")}</td><td class="r">${mark(v2, r.volatility_mae_persistence_pct.toFixed(2) + " pp")}</td></tr>`;
+        <td class="r">${mark(v1, r.volatility_mae_pct.toFixed(2) + " pp")}</td><td class="r">${mark(v2, r.volatility_mae_persistence_pct.toFixed(2) + " pp")}</td><td class="r">${cov}</td></tr>`;
     }).join("");
-    document.getElementById("score").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
+    document.getElementById("score").innerHTML = head + (body || `<tr><td colspan="8" class="empty">${t("nothing_checked")}</td></tr>`);
     const n = Math.min(...rows.map((r) => r.n), Infinity);
     document.getElementById("score-foot").textContent = (n < 500 ? t("too_few") + " " : "") + t("since").replace("{time}", summary.since ? fmtTime(summary.since, { dateOnly: true, year: true }) : "—");
   }
@@ -111,7 +113,7 @@
   function renderLog(h) {
     document.querySelectorAll("[data-h]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.h === String(h)));
     const rows = log.filter((r) => !h || r.horizon_hours === h).slice(0, 96);
-    const head = `<tr><th>${t("issued")}</th><th>${t("horizon")}</th><th>${t("said")}</th><th class="r">${t("up_chance")}</th><th>${t("happened")}</th><th>${t("result")}</th><th class="r">${t("swing_pred_obs")}</th></tr>`;
+    const head = `<tr><th>${t("issued")}</th><th>${t("horizon")}</th><th>${t("said")}</th><th class="r">${t("up_chance")}</th><th>${t("happened")}</th><th>${t("result")}</th><th class="r">${t("swing_pred_obs")}</th><th>${t("range_90")}</th></tr>`;
     const body = rows.map((r) => {
       const said = `<span class="res ${r.direction}">${icon(r.direction, 2)} ${t(r.direction)}</span>`;
       // Previsão ainda sem resultado: aparece já, marcada como aguardando.
@@ -120,15 +122,17 @@
       const res = r.pending ? `<span class="res wait">${icon("clock", 2)} ${t("waiting")}</span>`
         : r.hit ? `<span class="res up">${icon("check", 2)} ${t("hit")}</span>` : `<span class="res down">${icon("cross", 2)} ${t("miss")}</span>`;
       const swing = `${r.pred_volatility_pct.toFixed(2)}% / ${r.pending ? "—" : r.observed_volatility_pct.toFixed(2) + "%"}`;
+      const inside = r.in_range_90 == null ? "" : r.in_range_90 ? ` <span class="up">${icon("check", 2)}</span>` : ` <span class="down">${icon("cross", 2)}</span>`;
+      const range = r.range_low_90 == null ? "—" : `${fmtK(r.range_low_90)}–${fmtK(r.range_high_90)}${r.pending ? "" : inside}`;
       return `<tr><td>${fmtTime(r.time)}</td><td>${r.horizon_hours} h</td><td>${said}</td><td class="r">${pct(r.prob_up)}</td><td>${obs}</td><td>${res}</td>
-        <td class="r">${swing}</td></tr>`;
+        <td class="r">${swing}</td><td>${range}</td></tr>`;
     }).join("");
-    document.getElementById("log").innerHTML = head + (body || `<tr><td colspan="7" class="empty">${t("nothing_checked")}</td></tr>`);
+    document.getElementById("log").innerHTML = head + (body || `<tr><td colspan="8" class="empty">${t("nothing_checked")}</td></tr>`);
   }
   // Previsto contra real: barras = o que aconteceu; marcadores = o modelo e a referência.
   const plot = new WIMCG.ForecastPlot(document.getElementById("plot"));
   const plotMsg = document.getElementById("plot-msg");
-  let all = [], pending = [], view = "ret", ch = 1;
+  let all = [], pending = [], view = "range", ch = 1;
   const DAY7 = 7 * 86400e3;
   const swatch = (color, kind) => `<span class="sw ${kind}" style="--c:var(--${color})"></span>`;
   function renderPlot() {
@@ -146,7 +150,19 @@
     const legend = document.getElementById("legend");
     const waitTip = (r) => `<br><span class="wait">${t("waiting_until").replace("{time}", fmtTime(r.target_time))}</span>`;
     const waitLegend = rows.some((r) => r.pending) ? `<span>${swatch("muted", "wait")} ${t("legend_waiting")}</span>` : "";
-    if (view === "ret") {
+    const rel = (r, k) => (r[k] == null ? null : (r[k] / r.base_price - 1) * 100);
+    if (view === "range") {
+      const withBand = rows.filter((r) => r.range_low_90 != null);
+      if (!withBand.length) { plotMsg.hidden = false; plotMsg.textContent = t("no_range_yet"); legend.innerHTML = ""; return; }
+      plot.set({
+        n: withBand.length, times: withBand.map((r) => r.time), zero: true, fmt: (v) => fmtPct(v),
+        bands: withBand.map((r) => ({ lo90: rel(r, "range_low_90"), hi90: rel(r, "range_high_90"), lo50: rel(r, "range_low_50"), hi50: rel(r, "range_high_50") })),
+        marks: withBand.map((r) => (r.pending ? [] : [{ v: r.observed_return_pct, color: "ink" }])),
+        pending: withBand.map((r) => !!r.pending),
+        tip: (i) => { const r = withBand[i]; return `${fmtTime(r.time)} UTC · ${ch} h<br>${t("likely_range")}: ${fmtK(r.range_low_90)} – ${fmtK(r.range_high_90)} (90%)<br>${fmtK(r.range_low_50)} – ${fmtK(r.range_high_50)} (50%)` + (r.pending ? waitTip(r) : `<br>${t("ended_at")}: ${fmtK(r.observed_price)} · ${r.in_range_90 ? t("inside") : t("outside")}`); },
+      });
+      legend.innerHTML = `<span>${swatch("frost", "band90")} ${t("legend_band90")}</span><span>${swatch("frost", "band50")} ${t("legend_band50")}</span><span>${swatch("ink", "dash")} ${t("legend_ended")}</span>${waitLegend}`;
+    } else if (view === "ret") {
       plot.set({
         n: rows.length, times, zero: true, fmt: (v) => fmtPct(v), pending: rows.map((r) => !!r.pending),
         bars: rows.map((r) => (r.pending ? null : { v: r.observed_return_pct, color: r.observed_return_pct > 0 ? "up" : "down" })),
