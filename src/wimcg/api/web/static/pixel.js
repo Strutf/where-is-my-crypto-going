@@ -26,6 +26,8 @@
   const pad = (n) => String(n).padStart(2, "0");
   function fmtTime(iso, opts = {}) {
     const d = new Date(iso);
+    // Forma curta para eixos: "17/11" em português, "Nov 17" em inglês.
+    if (opts.short) return LANG === "pt" ? `${d.getUTCDate()}/${pad(d.getUTCMonth() + 1)}` : d.toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
     const date = d.toLocaleString(LOCALE, { month: "short", day: "numeric", timeZone: "UTC", ...(opts.year ? { year: "numeric" } : {}) });
     if (opts.dateOnly) return date;
     const hour = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
@@ -195,7 +197,7 @@
       this.cv.width = Math.round(W * dpr); this.cv.height = Math.round(H * dpr);
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.W = W; this.H = H;
-      this.m = { l: 62, r: this.s && this.s.lines ? 58 : 16, t: 14, b: 30 };
+      this.m = { l: 62, r: this.s && this.s.lines ? 58 : 16, t: 14, b: 44 };
       this.pw = W - this.m.l - this.m.r; this.ph = H - this.m.t - this.m.b;
       // Com poucas previsões, cada uma ocupa no máximo 56 px e o gráfico cresce da esquerda.
       this.slot = Math.min(this.pw / this.s.n, 56);
@@ -279,14 +281,41 @@
       for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 15) ends[k].y = ends[k - 1].y + 15;
       ctx.font = font(13, 500); ctx.textAlign = "left"; ctx.textBaseline = "middle";
       ends.forEach((e) => { ctx.fillStyle = tok(e.color); ctx.fillText(e.text, Math.min(e.x + 8, W - m.r + 6), e.y); });
-      // Datas embaixo: até uma a cada ~120 px.
-      ctx.font = font(12); ctx.fillStyle = tok("muted"); ctx.textBaseline = "top";
-      const k = Math.max(1, Math.min(s.n, Math.floor((this.slot * s.n) / 120)));
-      const idx = k === 1 ? [s.n - 1] : [...new Set(Array.from({ length: k }, (_, j) => Math.round(j * (s.n - 1) / (k - 1))))];
-      idx.forEach((i) => {
-        const x = this.X(i), label = fmtTime(s.times[i]);
-        ctx.textAlign = x - 50 < m.l ? "left" : x + 50 > W - 4 ? "right" : "center";
-        ctx.fillText(label, x, m.t + this.ph + 9);
+      // Eixo do tempo: a hora embaixo de cada coluna escolhida e, numa segunda linha, a data quando
+      // o dia muda. Os rótulos são medidos e nunca se encostam nem saem do gráfico.
+      ctx.font = font(12); ctx.fillStyle = tok("muted"); ctx.textBaseline = "top"; ctx.textAlign = "center";
+      const y1 = m.t + this.ph + 8, y2 = y1 + 15, gap = 14;
+      const picked = [];
+      let lastRight = -Infinity;
+      const tryLabel = (i, force) => {
+        const x = this.X(i), hour = fmtTime(s.times[i], { hourOnly: true });
+        const half = ctx.measureText(hour).width / 2;
+        const lo = Math.max(2, x - half), hi = Math.min(W - 2, x + half);
+        if (!force && lo < lastRight + gap) return false;
+        picked.push({ i, x: Math.min(Math.max(x, 2 + half), W - 2 - half), hour, right: hi });
+        lastRight = hi;
+        return true;
+      };
+      const step = Math.max(1, Math.ceil(70 / this.slot));
+      for (let i = 0; i < s.n; i += step) tryLabel(i, false);
+      // A última coluna sempre ganha rótulo; tira o anterior se os dois se encostarem.
+      if (!picked.length || picked[picked.length - 1].i !== s.n - 1) {
+        const lastX = this.X(s.n - 1), half = ctx.measureText(fmtTime(s.times[s.n - 1], { hourOnly: true })).width / 2;
+        while (picked.length && picked[picked.length - 1].right + gap > Math.min(lastX, W - 2 - half) - half) picked.pop();
+        lastRight = picked.length ? picked[picked.length - 1].right : -Infinity;
+        tryLabel(s.n - 1, true);
+      }
+      let prevDay = null, dateRight = -Infinity;
+      picked.forEach((p) => {
+        ctx.fillText(p.hour, p.x, y1);
+        const day = s.times[p.i].slice(0, 10);
+        if (day === prevDay) return;
+        const date = fmtTime(s.times[p.i], { short: true });
+        const half = ctx.measureText(date).width / 2;
+        const x = Math.min(Math.max(p.x, 2 + half), W - 2 - half);
+        if (x - half < dateRight + gap) return; // sem espaço: a data aparece no próximo rótulo
+        ctx.fillText(date, x, y2);
+        prevDay = day; dateRight = x + half;
       });
     }
     onMove(e) {
