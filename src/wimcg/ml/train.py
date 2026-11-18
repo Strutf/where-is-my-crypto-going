@@ -1,7 +1,9 @@
 """Treino mensal dos modelos publicados, com avaliação e trava de publicação.
 
-Dois conjuntos de modelos, escolhidos na comparação de 17/11/2026 (research/results/):
-- **direção:** gradient boosting só com as variáveis de preço (as outras não acrescentaram nada);
+Dois conjuntos de modelos, escolhidos nas comparações de 17 e 18/11/2026 (research/results/):
+- **direção:** gradient boosting só com as variáveis de preço (as outras não acrescentaram nada),
+  com `max_iter` e `min_samples_leaf` escolhidos por horizonte numa validação temporal
+  (`models.TunedGB`, desde a revisão 2 de 18/11/2026; antes, `models.GradientBoosting`);
 - **volatilidade:** gradient boosting com preço, estado do mercado e as volatilidades passadas.
 
 Cada treino faz duas coisas:
@@ -34,11 +36,15 @@ import numpy as np
 import pandas as pd
 
 from wimcg.ml import evaluate, features, intervals, models, volatility
-from wimcg.ml.models import GradientBoosting
+from wimcg.ml.models import TunedGB
 
 log = logging.getLogger(__name__)
 
 EVAL_START = "2019-01-01"
+# Revisão do método dos modelos publicados (entra no nome da versão, junto da versão das variáveis):
+# 1 = gradient boosting fixo (17/11/2026); 2 = regularização escolhida por horizonte (18/11/2026).
+MODEL_REVISION = 2
+DIRECTION_MODEL = "gb_tuned"
 # Horizontes em que a probabilidade publicada é a calibrada (ver docs/contexto.md, 18/11/2026).
 CALIBRATE = {1: True, 4: True, 24: True}
 ACCURACY_TOLERANCE = 0.005  # meio ponto percentual
@@ -123,7 +129,7 @@ def totals(months: list[dict], kind: str, h: int, keep: set[str] | None = None) 
 def evaluate_monthly(table: pd.DataFrame, groups: dict[str, list[str]], first: str, last: str) -> tuple[list[dict], pd.DataFrame, pd.DataFrame]:
     """Somas por mês, mais as previsões fora da amostra (direção e volatilidade do gb)."""
     cols = feature_columns(groups)
-    direction = evaluate.walk_forward(table, cols["direction"], "gb", first, last)
+    direction = evaluate.walk_forward(table, cols["direction"], DIRECTION_MODEL, first, last)
     vols = {
         name: volatility.walk_forward(table, cols["volatility"], name, first, last, evaluate.TRAIN_YEARS, evaluate.PURGE)
         for name in ("gb", "har", "persistence")
@@ -150,7 +156,7 @@ def fit_final(table: pd.DataFrame, groups: dict[str, list[str]]) -> dict:
     """Modelos publicados: os 3 anos mais recentes com alvo conhecido."""
     cols = feature_columns(groups)
     recent = table[table.index >= table.index.max() - pd.DateOffset(years=evaluate.TRAIN_YEARS)]
-    direction = GradientBoosting()
+    direction = TunedGB()
     direction.fit(recent, cols["direction"], recent)
     vol = volatility.GradientBoosting()
     vol.fit(recent, cols["volatility"])
@@ -185,7 +191,7 @@ def train(table: pd.DataFrame, groups: dict[str, list[str]], last_test: str, eva
     for h, c in calibration.items():
         c["climatology"] = fitted["climatology"][h]
     now = datetime.now(UTC)
-    version = f"v{features.FEATURE_VERSION}-{now:%Y%m%d}"
+    version = f"v{features.FEATURE_VERSION}.{MODEL_REVISION}-{now:%Y%m%d}"
     cols = feature_columns(groups)
     summary = {
         "model_version": version,
@@ -206,7 +212,10 @@ def train(table: pd.DataFrame, groups: dict[str, list[str]], last_test: str, eva
         "calibration": {str(h): c for h, c in calibration.items()},
         "reproducibility": {
             "code": code_version(),
-            "hyperparameters": {"direction": models.GB_PARAMS, "volatility": volatility.GB_PARAMS},
+            "hyperparameters": {
+                "direction": {"model": DIRECTION_MODEL, "base": models.GB_PARAMS, "grid": models.TUNE_GRID, "choice": {str(h): c for h, c in fitted["direction"].choice.items()}},
+                "volatility": volatility.GB_PARAMS,
+            },
             "environment": {"python": platform.python_version(), "scikit-learn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__},
         },
     }

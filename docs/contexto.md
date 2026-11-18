@@ -450,6 +450,12 @@ saiu igual à feita localmente, com diferenças de arredondamento da ordem de 10
 Ressalva: 12 comparações (4 variantes × 3 horizontes); o ganho de acerto em 4 h está no limite e
 pode ser sorte. Os ganhos de Brier são firmes. A vantagem de direção continua em torno de 1 ponto.
 
+**Decisão (autor, 18/11/2026): o `gb_tuned` passa a ser o modelo de direção publicado** (revisão 2
+do método, versões `v1.2-…`), com a calibração por cima. Entra pela trava de publicação normal. O
+treino mensal avalia e treina o próprio `gb_tuned`, então a calibração e a trava passam a se basear
+nele. Antes de trocar, as previsões ao vivo eram do `gb` fixo (versões `v1-20261117` e
+`v1-20261118`); a coluna `model_version` da tabela `predictions` separa os dois períodos.
+
 ## Próximos passos
 
 1. Retreinar com a faixa provável e a calibração e conferir as primeiras previsões com faixa.

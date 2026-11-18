@@ -186,10 +186,13 @@ esperado para um mercado líquido e fica publicado assim. Para reproduzir:
 
 ### Previsões publicadas e verificação
 
-A partir da comparação, o projeto publica dois modelos de gradient boosting, para 1, 4 e 24 h:
+A partir das comparações, o projeto publica dois modelos de gradient boosting, para 1, 4 e 24 h:
 
-- **direção**, só com as variáveis de preço: mesmo sem superar as regras simples na avaliação
-  histórica, fica publicada para ser conferida ao vivo, com transparência;
+- **direção**, só com as variáveis de preço e com a regularização escolhida por horizonte numa
+  validação temporal (desde 18/11/2026). A vantagem sobre regras simples é pequena (cerca de 1
+  ponto; em 4 h, a primeira com intervalo de confiança acima de zero contra a regra de inverter) e
+  fica publicada para ser conferida ao vivo, com transparência
+  ([resultados](research/results/research_eval.md));
 - **volatilidade** (o quanto o preço vai oscilar): na avaliação de 2019 a 2026, erra de 20% a 25%
   menos que repetir a volatilidade recente e de 4% a 8% menos que o HAR, a referência clássica.
 - **faixa provável do preço**, com 90% e 50% de chance, a partir da volatilidade prevista: no

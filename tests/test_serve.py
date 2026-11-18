@@ -26,6 +26,9 @@ def _write(store, hourly, fear_greed, news):
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
+    from wimcg.ml import models
+
+    monkeypatch.setattr(models, "TUNE_GRID", [(20, 200), (40, 1000)])  # grade pequena: testes rápidos
     monkeypatch.setenv("FS_STORAGE", "local")
     monkeypatch.setenv("FS_DATA_DIR", str(tmp_path))
     store = LocalStorage(tmp_path)
@@ -43,6 +46,9 @@ def test_train_predict_once_and_verify(store, monkeypatch):
     assert main(["train", "--publish", "--evaluate-from", "2024-12-01", "--last", "2025-01-01"]) == 0
     report = serve.current_report(store)
     assert report["evaluation"]["period"] == ["2024-12", "2025-01"]
+    # Revisão 2: regularização escolhida por horizonte, registrada no relatório.
+    assert report["model_version"].startswith("v1.2-")
+    assert set(report["reproducibility"]["hyperparameters"]["direction"]["choice"]) == {"1", "4", "24"}
     assert set(report["evaluation"]["direction"]) == {"1", "4", "24"}
 
     last_hour = load_dataset(store, "btc-usd-1h")["time"].max()
