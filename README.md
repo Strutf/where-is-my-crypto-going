@@ -214,7 +214,9 @@ Como no Future Space:
   Brier e diagrama de confiabilidade para a probabilidade.
 - **Tamanho:** MAE do retorno, contra o passeio aleatório (retorno zero) e contra a média
   histórica.
-- **Volatilidade:** contra o GARCH, o modelo clássico.
+- **Volatilidade:** contra a persistência, o HAR (a referência padrão) e o GARCH. O gradient
+  boosting erra menos que os três; o GARCH, medido contra o tamanho realizado do movimento, fica
+  atrás do HAR ([resultados](research/results/volatility_eval.md)).
 - **Cuidados:**
   - divisão temporal com validação andando para a frente;
   - avaliação em blocos não sobrepostos, para não contar a mesma janela várias vezes;

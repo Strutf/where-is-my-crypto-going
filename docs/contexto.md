@@ -420,6 +420,36 @@ de preço. "Melhor" e "pior" sempre pelo intervalo de 95% da **diferença** (boo
 Variantes de direção testadas: 4 (`gb` de novo, como referência no mesmo ambiente, `gb_noes`,
 `logit`, `gb_tuned`); de volatilidade: 4 (persistência, HAR, gb, `garch`).
 
+**Resultados** (workflow `research`, execução 44409971767, dataset `e27e190d8f`; relatórios em
+`research/results/research_eval.md` e `volatility_eval.md`; a avaliação da faixa e da calibração
+saiu idêntica à feita localmente):
+
+1. **`gb_noes` vira a nova base**, como registrado: acerto igual ao do `gb` nos três horizontes
+   (intervalos da diferença incluem o zero). A hipótese de probabilidades menos exageradas em 24 h
+   não se confirmou (Brier skill −3,6% contra −3,9%, empate). Em 1 h, o `gb` com a parada
+   antecipada tem Brier um pouco melhor (+0,27, IC +0,17 a +0,37).
+2. **`logit` perde:** 53,0% em 1 h, igual à regra de inverter, e −1,1 ponto contra a base (IC
+   −1,5 a −0,7). A vantagem do gradient boosting vem de combinações não lineares, não de uma
+   reversão bem ponderada.
+3. **`garch` perde** para o HAR (erro +33%, +21% e +14% em 1, 4 e 24 h) e para a persistência em
+   1 h. Como antecipado antes de ver o resultado, parte disso é medida: o GARCH prevê a variância
+   (raiz da soma de E[r²]), e o erro é medido contra a raiz da soma de r² realizada, que em média é
+   menor com caudas grossas. Fica como referência, com essa ressalva.
+4. **Recortes:** com o modelo confiante, a vantagem sobre inverter fica entre 1 e 2,5 pontos (a
+   confiança não cria vantagem nova); depois de um movimento grande (1,9% das horas), empate com
+   inverter; nos movimentos futuros grandes (descritivo), modelo e regra acertam menos de 50% (42%
+   a 49%): nos movimentos fortes, ganha quem segue a direção.
+5. **`gb_tuned` é a melhor variante.** Contra a base: Brier melhor nos três horizontes (+0,21,
+   +0,63 e +3,37 pontos, todos com IC acima de zero); acerto melhor em 4 h (+0,38, IC +0,08 a
+   +0,71) e empate em 1 h e 24 h. Contra inverter em 4 h: +0,91 (IC +0,39 a +1,40), o primeiro
+   modelo a vencer a regra em 4 h com intervalo acima de zero. Escolhas instáveis de mês a mês,
+   mas quase sempre modelos pequenos (50 árvores): o modelo atual é complexo demais para o sinal.
+6. **Calibração por cima:** Brier skill do `gb_tuned` calibrado +0,83%, +0,99% e +0,10% (1, 4 e
+   24 h), o primeiro positivo nos três horizontes.
+
+Ressalva: 12 comparações (4 variantes × 3 horizontes); o ganho de acerto em 4 h está no limite e
+pode ser sorte. Os ganhos de Brier são firmes. A vantagem de direção continua em torno de 1 ponto.
+
 ## Próximos passos
 
 1. Retreinar com a faixa provável e a calibração e conferir as primeiras previsões com faixa.
