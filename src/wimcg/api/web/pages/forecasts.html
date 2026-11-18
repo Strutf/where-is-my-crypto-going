@@ -144,7 +144,8 @@
     // resultado (só o traço do previsto). Acerto: só as conferidas, desde o início.
     let rows = all.filter((r) => r.horizon_hours === ch);
     if (view !== "acc") rows = rows.filter((r) => r.time >= cutoff).concat(pending.filter((r) => r.horizon_hours === ch)).sort((a, b) => (a.time < b.time ? -1 : 1));
-    if (!rows.length) { plotMsg.hidden = false; plotMsg.textContent = t("nothing_checked"); return; }
+    const showMsg = (key) => { plot.clear(); plotMsg.hidden = false; plotMsg.textContent = t(key); document.getElementById("legend").innerHTML = ""; };
+    if (!rows.length) { showMsg("nothing_checked"); return; }
     plotMsg.hidden = true;
     const times = rows.map((r) => r.time);
     const legend = document.getElementById("legend");
@@ -153,7 +154,7 @@
     const rel = (r, k) => (r[k] == null ? null : (r[k] / r.base_price - 1) * 100);
     if (view === "range") {
       const withBand = rows.filter((r) => r.range_low_90 != null);
-      if (!withBand.length) { plotMsg.hidden = false; plotMsg.textContent = t("no_range_yet"); legend.innerHTML = ""; return; }
+      if (!withBand.length) { showMsg("no_range_yet"); return; }
       plot.set({
         n: withBand.length, times: withBand.map((r) => r.time), zero: true, fmt: (v) => fmtPct(v),
         bands: withBand.map((r) => ({ lo90: rel(r, "range_low_90"), hi90: rel(r, "range_high_90"), lo50: rel(r, "range_low_50"), hi50: rel(r, "range_high_50") })),
@@ -179,7 +180,7 @@
       });
       legend.innerHTML = `<span>${swatch("frost", "bar")} ${t("legend_real_swing")}</span><span>${swatch("ink", "dash")} ${t("legend_model")}</span><span>${swatch("muted", "dash2")} ${t("legend_repeat")}</span>${waitLegend}`;
     } else {
-      if (!rows.length) { plotMsg.hidden = false; plotMsg.textContent = t("nothing_checked"); return; }
+      if (!rows.length) { showMsg("nothing_checked"); return; }
       // Acerto acumulado desde o início, do modelo e das duas regras sem modelo.
       const cum = (key) => { let k = 0; return rows.map((r, i) => (k += r[key] ? 1 : 0, (k / (i + 1)) * 100)); };
       const lines = [{ values: cum("always_up_hit"), color: "frost", width: 2 }, { values: cum("reversal_hit"), color: "muted", width: 2, dashed: true }, { values: cum("hit"), color: "accent", width: 3 }];
@@ -211,7 +212,7 @@
     })
     .catch(() => {
       document.getElementById("log").innerHTML = `<tr><td class="empty">${t("load_error")}</td></tr>`;
-      plotMsg.textContent = t("load_error");
+      plot.clear(); plotMsg.hidden = false; plotMsg.textContent = t("load_error");
     });
   document.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => renderLog(Number(b.dataset.h))));
 

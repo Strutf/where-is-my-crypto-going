@@ -52,10 +52,13 @@ def _job(model: str, set_name: str, seed: int, first: str, last: str, threads: i
     # mais lentas (medido em 17/11/2026 num Apple M5: o gb leva 3,4 s por mês sozinho com 1 núcleo,
     # mas não terminou em 35 min com 5 rodadas de 2 núcleos; a gru não acelera com 4 núcleos).
     import sklearn.ensemble  # noqa: F401  (carrega o OpenMP do scikit-learn antes de limitá-lo)
-    import torch
     from threadpoolctl import threadpool_limits
 
-    torch.set_num_threads(threads)
+    if model in ("mlp", "gru"):
+        # Só as redes neurais usam o PyTorch, que fica fora das dependências do Actions.
+        import torch
+
+        torch.set_num_threads(threads)
     threadpool_limits(threads)
     table = pd.read_parquet(TABLE)
     groups = json.loads(GROUPS_FILE.read_text())["groups"]

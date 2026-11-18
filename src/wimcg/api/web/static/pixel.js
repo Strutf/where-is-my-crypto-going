@@ -164,6 +164,12 @@
       themeListeners.push(() => this.draw());
       addEventListener("resize", () => this.draw());
     }
+    // Apaga o desenho anterior (usado quando a aba mostra só uma mensagem).
+    clear() {
+      this.s = null; this.hover = -1; this.tip.hidden = true;
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, this.cv.width, this.cv.height);
+    }
     set(spec) {
       this.s = spec; this.hover = -1; this.tip.hidden = true;
       const vals = [];
